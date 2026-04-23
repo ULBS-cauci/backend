@@ -74,18 +74,16 @@ Then edit (ask teammates for production .env) `.env` and set real values (remove
 
 For Qdrant-related environment variables and examples, see `qdrant/README.md`.
 
-## Dependency Workflow
-
-### 1) Add a new dependency
+## When adding a new dependency
 
 1. Activate your virtual environment.
 2. Install the package:
 
-pip install <package-name>
+- pip install package-name
 
 3. Regenerate locked dependencies:
 
-pip freeze > requirements.txt
+- pip freeze > requirements.txt
 
 4. Commit both your code changes and `requirements.txt`.
 

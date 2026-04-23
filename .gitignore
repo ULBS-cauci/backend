@@ -61,3 +61,6 @@ Thumbs.db
 dmypy.json
 **/unused/
 *.log
+
+# Qdrant local data
+qdrant/qdrant_data/
