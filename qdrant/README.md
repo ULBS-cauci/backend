@@ -141,7 +141,7 @@ Important:
 
 Your Python app reads these variables from `.env`:
 
-- `QDRANT_URL`
+- `QDRANT_HOST`
 - `QDRANT_PORT`
 - `QDRANT_SERVICE_API_KEY`
 
@@ -150,7 +150,7 @@ Use values based on where Qdrant is running.
 ### Local development (Docker on your machine)
 
 ```env
-QDRANT_URL=localhost
+QDRANT_HOST=localhost
 QDRANT_PORT=6333
 QDRANT_SERVICE_API_KEY=your_api_key_variable_from_docker_compose
 ```
@@ -158,7 +158,7 @@ QDRANT_SERVICE_API_KEY=your_api_key_variable_from_docker_compose
 ### Production deployment
 
 ```env
-QDRANT_URL=
+QDRANT_HOST=
 QDRANT_PORT=
 QDRANT_SERVICE_API_KEY=
 (Ask for .env.production)
@@ -166,7 +166,7 @@ QDRANT_SERVICE_API_KEY=
 
 Notes:
 
-- Keep `QDRANT_URL` as `localhost` only for local development.
+- Keep `QDRANT_HOST` as `localhost` only for local development.
 - For production, use full `https://...` URL.
 - Keep production secrets outside git (secret manager, CI/CD env vars, or host-level env injection).
 

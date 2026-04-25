@@ -8,15 +8,15 @@ load_dotenv()
 
 
 def build_client() -> QdrantClient:
-    qdrant_url = os.getenv("QDRANT_URL", "")
+    qdrant_host = os.getenv("QDRANT_HOST", "")
     qdrant_port = os.getenv("QDRANT_PORT", "6333")
     qdrant_api_key = os.getenv("QDRANT_SERVICE_API_KEY")
 
-    if qdrant_url.startswith(("http://", "https://")):
-        return QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
+    if qdrant_host.startswith(("http://", "https://")):
+        return QdrantClient(url=qdrant_host, api_key=qdrant_api_key)
 
     return QdrantClient(
-        host=qdrant_url,
+        host=qdrant_host,
         port=int(qdrant_port),
         api_key=qdrant_api_key,
     )

@@ -36,7 +36,7 @@ The application exposes a standard RESTful API. Endpoints are grouped by domain 
 * **D. System Configuration (`/admin`):** Allows dynamic adjustment of AI behavior.
 
 ### 5. Scalable Folder Structure
-To support the modular REST API and background file processing, the fully-expanded directory structure is designed as follows (excluding implicit namespace items):
+To support the modular REST API and background file processing, the current directory structure is:
 
 ```text
 app/
@@ -48,27 +48,29 @@ app/
 │       ├── auth.py             
 │       ├── files.py            
 │       └── sessions.py         
-├── clients/                    # Infrastructure / Data Access Layer
-│   ├── db_client.py            # PostgreSQL connection pool
-│   ├── llm_client.py           # Text Generation wrapper (LLM SDKs)
-│   ├── embedding_client.py     # Connector to embedding model
-│   ├── qdrant_client.py        # Vector DB operations
-│   └── storage_client.py       # S3/Local file storage wrapper
+├── data_access/                # Infrastructure / Data Access Layer
+│   ├── clients/                # Concrete adapters to external systems
+│   │   ├── relational_db_client.py # PostgreSQL connection pool
+│   │   ├── llm_client.py       # Text generation wrapper (LLM SDKs)
+│   │   ├── embedding_client.py # Connector to embedding model
+│   │   ├── qdrant_client.py    # Vector DB operations
+│   │   └── object_storage_client.py # S3/local file storage wrapper
+│   └── interfaces/             # Contracts for swappable implementations
+│       └── vector_db.py
 ├── core/                       # App-Wide Configuration & Cross-Cutting Concerns
 │   ├── config.py               # Pydantic BaseSettings for Env vars
 │   ├── exceptions.py           # Custom Error definitions
 │   └── security.py             # JWT hashing and validation logic
-├── models/                     # SQLAlchemy/SQLModel classes (Database tables)
 ├── rag_engine/                 # Domain Logic (AI Operations)
 │   ├── fusion.py               # Logic for Reciprocal Rank Fusion (RRF)
-│   ├── reranker.py             # (Optional) Wrapper for a Cross-Encoder model
 │   ├── context_builder.py      # Combines query and retrieved chunks into prompt
 │   ├── output_formatter.py     # Structures LLM output into JSON/Quiz format
 │   └── query_rewrite.py        # Condenses chat history into standalone queries
-├── schemas/                    # Pydantic classes (API Request/Response validation)
+├── schemas/                    # Pydantic classes (domain/API validation)
+│   └── vector_schemas.py
 ├── services/                   # Business Logic Orchestration
 │   ├── auth_service.py         
-│   ├── chat_service.py         # Ties together routers <-> rag_engine <-> clients
+│   ├── chat_service.py         # Ties together routers <-> rag_engine <-> data_access
 │   └── file_service.py         
 └── workers/                    # Background Tasks
     └── ingestion_worker.py     # Heavy lifting: PDF parsing, chunking, and embedding
@@ -83,7 +85,7 @@ app/
 Code must enforce strict boundaries between layers. 
 * **Routers (`api/`):** Only handle HTTP requests, input validation, and HTTP responses. Do not put business logic or database queries here.
 * **Services (`services/`):** Handle business logic and process orchestration. Services should NOT return `HTTPException` or know anything about HTTP status codes. They should raise custom domain exceptions (defined in `core/exceptions.py`).
-* **Clients (`clients/`):** Solely responsible for external I/O (Database, API, File System). They should not contain application business logic.
+* **Clients (`data_access/clients/`):** Solely responsible for external I/O (Database, API, File System). They should not contain application business logic.
 
 ### 2. 100% Asynchronous I/O Execution
 To allow high concurrency during slow network/LLM requests, blocking code is forbidden on the main thread.
@@ -98,7 +100,7 @@ Hidden global states cause flakey tests and unpredictable bugs.
 ### 4. Strict Type Hinting & Validation
 Python is dynamic, but this codebase operates under strict type-checking assumptions.
 * **Rule:** All function signatures must include type hints for arguments and return types.
-* **Enforcement:** Data traversing the API boundary (Input/Output) MUST be validated using Pydantic models located in `schemas/`. Data mapped to the database MUST use models located in `models/`.
+* **Enforcement:** Data traversing the API boundary (Input/Output) MUST be validated using Pydantic models located in `schemas/`.
 
 ---
 
