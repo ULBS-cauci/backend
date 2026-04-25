@@ -11,8 +11,15 @@ The architecture prioritizes modularity, testability, and robust memory manageme
 ### 2. The Prompt Processing Pipeline
 When a user submits a prompt, the system executes the following linear flow orchestrated by the Business Logic (Service) layer:
 * **A. Input Processing & Validation:** The API endpoint receives the user's query and requested output format. The system initializes a study session and fetches recent conversation history. Validating early ensures bad payloads don't waste compute.
-* **B. Query Transformation:** The raw user query and the chat history are passed to a `QueryRewriter`. It condenses the conversation into a highly specific, standalone search query, allowing the Vector DB to match accurately.
-* **C. Advanced Retrieval Strategy:** The optimized query is embedded and sent to Qdrant. The retrieval phase uses a mix of Semantic (Vector) and Lexical (BM25) search.
+* **B. Query Transformation & Conditional Routing:** The raw user query is first evaluated using a lightweight heuristic check to determine if it relies on previous chat context (e.g., checking for pronouns like "it" or "this"). If context resolution is required, the raw query and the chat history are passed to a QueryRewriter powered by a dedicated high-speed, low-cost model to minimize latency. It condenses the conversation into a highly specific, standalone search query, allowing the Vector DB to match accurately. If the query is entirely self-contained, the rewriter is bypassed entirely to save compute and reduce Time to First Token (TTFT), and the raw query is passed directly to the retrieval phase.
+* **C. Hybrid Retrieval & Fusion Strategy:** The system executes a parallel retrieval process:
+    * Semantic Search: The optimized query is embedded via the EmbeddingClient and sent to Qdrant to find conceptual matches.
+
+    * Lexical Search (BM25): Simultaneously, the system performs a keyword-based search to capture exact terminology, acronyms, and unique identifiers.
+
+    * Reciprocal Rank Fusion (RRF): The results from both searches—which use different scoring scales—are merged using the RRF algorithm. This normalizes the scores to create a single, prioritized list of the most relevant chunks.
+
+    * (Optional) Cross-Encoder Re-ranking: To ensure maximum precision, the top-scoring fused results are passed through a Re-ranker model that evaluates the direct relationship between the query and each chunk, filtering out low-relevance noise.
 * **D. Prompt Assembly (Dynamic Context):** The retrieved chunks are evaluated. If no relevant chunks are found, the system triggers the **"I don't know" fallback**, preventing hallucinations. If relevant chunks exist, a `ContextBuilder` formats the chunks and the requested output type into a final system prompt.
 * **E. Generation & Streaming:** The assembled prompt is sent to the LLM. The response is yielded asynchronously and streamed back to the client via Server-Sent Events (SSE).
 
@@ -44,6 +51,7 @@ app/
 ├── clients/                    # Infrastructure / Data Access Layer
 │   ├── db_client.py            # PostgreSQL connection pool
 │   ├── llm_client.py           # Text Generation wrapper (LLM SDKs)
+│   ├── embedding_client.py     # Connector to embedding model
 │   ├── qdrant_client.py        # Vector DB operations
 │   └── storage_client.py       # S3/Local file storage wrapper
 ├── core/                       # App-Wide Configuration & Cross-Cutting Concerns
@@ -52,6 +60,8 @@ app/
 │   └── security.py             # JWT hashing and validation logic
 ├── models/                     # SQLAlchemy/SQLModel classes (Database tables)
 ├── rag_engine/                 # Domain Logic (AI Operations)
+│   ├── fusion.py               # Logic for Reciprocal Rank Fusion (RRF)
+│   ├── reranker.py             # (Optional) Wrapper for a Cross-Encoder model
 │   ├── context_builder.py      # Combines query and retrieved chunks into prompt
 │   ├── output_formatter.py     # Structures LLM output into JSON/Quiz format
 │   └── query_rewrite.py        # Condenses chat history into standalone queries
