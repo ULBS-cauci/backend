@@ -12,8 +12,6 @@ class PostgresClient(IRelationalDB):
 
     async def add(self, record: T) -> T:
         self.session.add(record)
-        # Flush trimite query-ul catre DB pentru a genera ID-ul, 
-        # dar pastreaza tranzactia deschisa pentru siguranta
         await self.session.flush() 
         return record
 
@@ -21,4 +19,4 @@ class PostgresClient(IRelationalDB):
         return await self.session.get(model_class, record_id)
 
     async def execute(self, statement: Any) -> Any:
-        return await self.session.execute(statement)
+        return await self.session.execute(statement)  

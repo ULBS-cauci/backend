@@ -2,3 +2,5 @@ qdrant-client
 pydantic-settings
 fastapi
 ollama
+sqlmodel
+asyncpg

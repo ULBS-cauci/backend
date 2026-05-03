@@ -63,4 +63,7 @@ dmypy.json
 *.log
 
 # Qdrant local data
-qdrant/qdrant_data/
+qdrant_data/
+
+#PostgreSQL local data
+postgres_data/
