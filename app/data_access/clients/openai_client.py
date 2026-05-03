@@ -15,7 +15,7 @@ class OpenAILLMCClient(LLMInterface):
 
 
     async def generate(self,messages: List[ChatMessage]) -> str:
-        response =  await self.client.chat.completions.create(
+        response =  await self._client.chat.completions.create(
             model = self._model,
             temperature = self._temperature,
             messages= self._to_openai(messages),
@@ -24,7 +24,7 @@ class OpenAILLMCClient(LLMInterface):
     
 
     async def stream(self, messages: List[ChatMessage])->AsyncIterator[str]:
-        response_stream = await self.client.chat.completions.create(
+        response_stream = await self._client.chat.completions.create(
             model= self._model,
             temperature = self._temperature,
             messages = self._to_openai(messages),
@@ -34,5 +34,9 @@ class OpenAILLMCClient(LLMInterface):
             content = chunk.choices[0].delta.content 
             if content:
                 yield content
-
+                
+    @staticmethod
+    def _to_openai(messages: List[ChatMessage]) -> List[dict]:
+        """Convert our domain ChatMessage to the dict format OpenAI expects."""
+        return [{"role": m.role.value, "content": m.content} for m in messages]
 

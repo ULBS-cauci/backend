@@ -68,3 +68,5 @@ dmypy.json
 # Docker volume data (paths match docker-compose.yml mounts in backend/)
 qdrant_data/
 minio_data/
+
+scripts/

@@ -7,6 +7,9 @@ from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.data_access.interfaces.embedding import IEmbeddingClient
 from app.data_access.clients.embedding_client import OllamaEmbeddingClient
 
+from app.data_access.interfaces.llm import LLMInterface
+from app.data_access.clients.openai_client import OpenAILLMCClient
+
 @lru_cache()
 def get_settings() -> Settings:
     """Reads and caches the settings so they are only initialized once."""
@@ -37,6 +40,24 @@ def _get_ollama_client() -> IEmbeddingClient:
         model_name=settings.OLLAMA_EMBED_MODEL
     )
 
+@lru_cache()
+def _get_openai_client() -> OpenAILLMCClient:
+    """Caches the OpenAI client per application lifecycle."""
+    settings = get_settings()
+    return OpenAILLMCClient(
+        api_key=settings.OPENAI_API_KEY,
+        model=settings.OPENAI_LLM_MODEL,
+        temperature=settings.LLM_TEMPERATURE
+    )
+
+def get_llm_client(settings: Settings = Depends(get_settings)) -> LLMInterface:
+    """
+    Yields the configured LLM client according to environment settings.
+    Typed against the ABC interface to preserve complete DI flexibility.
+    """
+    if settings.LLM_CLIENT_TYPE == "openai":
+        return _get_openai_client()
+    
 def get_embedding_client(settings: Settings = Depends(get_settings)) -> IEmbeddingClient:
     """
     Yields the configured Embedding client according to environment settings.
