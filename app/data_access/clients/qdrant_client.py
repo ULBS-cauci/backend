@@ -2,16 +2,12 @@ from typing import List
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Optional, PointStruct, VectorParams, Distance
 
-from data_access.interfaces.vector_db import VectorDBClient
-from schemas.vector_schemas import DocumentChunk, SearchResult
+from app.data_access.interfaces.vector_db import VectorDBInterface
+from app.schemas.vector_schemas import DocumentChunk, SearchResult
 
-class QdrantClient(VectorDBClient):
-    """
-    Concrete implementation of the VectorDBClient using Qdrant.
-    """
-    def __init__(self, host: str, port: int, api_key: Optional[str] = None):
-        # The SDK explicitly uses the host and port provided
-        self.client = AsyncQdrantClient(host=host, port=port, api_key=api_key)
+class QdrantClient(VectorDBInterface):
+    def __init__(self, endpoint: str, api_key: Optional[str] = None):
+        self.client = AsyncQdrantClient(url=endpoint, api_key=api_key)
 
     async def create_collection(self, collection_name: str, vector_size: int) -> bool:
         if await self.client.collection_exists(collection_name=collection_name):

@@ -1,3 +1,4 @@
 qdrant-client
 pydantic-settings
 fastapi
+aioboto3

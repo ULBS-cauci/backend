@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import List
-from schemas.vector_schemas import DocumentChunk, SearchResult
+from app.schemas.vector_schemas import DocumentChunk, SearchResult
 
-class VectorDBClient(ABC):
+class VectorDBInterface(ABC):
     """
     Abstract Base Class defining the contract for any Vector Database
     used in the AI Tutor application.
