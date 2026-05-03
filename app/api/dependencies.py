@@ -2,7 +2,7 @@ from functools import lru_cache
 from fastapi import Depends
 from app.core.config import Settings
 from app.data_access.clients.qdrant_client import QdrantClient
-from app.data_access.interfaces.vector_db import VectorDBClient
+from app.data_access.interfaces.vector_db import VectorDBInterface
 
 from app.data_access.interfaces.embedding import IEmbeddingClient
 from app.data_access.clients.embedding_client import OllamaEmbeddingClient
@@ -28,7 +28,7 @@ def _get_qdrant_client() -> QdrantClient:
         api_key=settings.QDRANT_SERVICE_API_KEY
     )
 
-def get_vector_db_client(settings: Settings = Depends(get_settings)) -> VectorDBClient:
+def get_vector_db_client(settings: Settings = Depends(get_settings)) -> VectorDBInterface:
     """Yields the configured Vector Database client."""
     if settings.VECTOR_DB_TYPE == "qdrant":
         return _get_qdrant_client()

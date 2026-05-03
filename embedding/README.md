@@ -10,7 +10,7 @@ retrieval semantic peste un text.
 
 > ```activeaza venv```
 
-> ```pip install -r requirments.txt```
+> ```pip install -r requirements.txt```
 
 ## Rulare
 

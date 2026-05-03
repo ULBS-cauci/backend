@@ -1,12 +1,19 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
+
 class Settings(BaseSettings):
-    # These names must exactly match your .env file
+    # Vector DB
     VECTOR_DB_TYPE: str
-    QDRANT_HOST: str
-    QDRANT_PORT: int
-    QDRANT_SERVICE_API_KEY: Optional[str] = None
+    VECTOR_DB_ENDPOINT: str
+    VECTOR_DB_SERVICE_API_KEY: Optional[str] = None
+
+    # Object Storage
+    OBJECT_STORAGE_TYPE: str
+    OBJECT_STORAGE_ENDPOINT: str
+    OBJECT_STORAGE_ACCESS_KEY: str
+    OBJECT_STORAGE_SECRET_KEY: str
+    OBJECT_STORAGE_USE_SSL: bool = True
 
     # General Embedding Client Selection (e.g., "ollama", "openai")
     EMBEDDING_CLIENT_TYPE: str

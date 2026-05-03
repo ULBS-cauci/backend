@@ -47,6 +47,9 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+.env.production
+.env.development
+.env.test
 
 # OS
 .DS_Store
@@ -62,8 +65,9 @@ dmypy.json
 **/unused/
 *.log
 
-# Qdrant local data
+# Docker volume data (paths match docker-compose.yml mounts in backend/)
 qdrant_data/
+minio_data/
 
 #PostgreSQL local data
 postgres_data/

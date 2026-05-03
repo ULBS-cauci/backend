@@ -4,3 +4,5 @@ fastapi
 ollama
 sqlmodel
 asyncpg
+aioboto3
+
