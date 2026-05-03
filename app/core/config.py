@@ -22,5 +22,13 @@ class Settings(BaseSettings):
     OLLAMA_HOST: str
     OLLAMA_EMBED_MODEL: str
 
+    # General LLM Client Selection (e.g., "openai", "ollama")
+    LLM_CLIENT_TYPE: str
+
+    # OpenAI LLM settings
+    OPENAI_API_KEY: str
+    OPENAI_LLM_MODEL: str = "gpt-4o-mini"
+    LLM_TEMPERATURE: float = 0.2
+
     # This tells Pydantic to look for the .env file in your root directory
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
