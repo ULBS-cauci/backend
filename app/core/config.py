@@ -31,4 +31,6 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = 0.2
 
     # This tells Pydantic to look for the .env file in your root directory
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
