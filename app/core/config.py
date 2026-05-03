@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     # Ollama embedding model settings
     OLLAMA_HOST: str
     OLLAMA_EMBED_MODEL: str
+    
+    # Relational DB Settings (PostgreSQL)
+    # Ex: "postgresql+asyncpg://admin:secretpassword@localhost:5432/ai_tutor_db"
+    DATABASE_URL: str
 
     # This tells Pydantic to look for the .env file in your root directory
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
