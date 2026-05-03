@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List
-from schemas.vector_schemas import DocumentChunk, SearchResult
+from app.schemas.vector_schemas import DocumentChunk, SearchResult
 
 class VectorDBClient(ABC):
     """

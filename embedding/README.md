@@ -8,7 +8,9 @@ retrieval semantic peste un text.
 
 ## Instalare
 
-> ### pip install -r requirments.txt
+> ```activeaza venv```
+
+> ```pip install -r requirments.txt```
 
 ## Rulare
 

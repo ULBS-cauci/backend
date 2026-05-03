@@ -2,8 +2,8 @@ from typing import List
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Optional, PointStruct, VectorParams, Distance
 
-from data_access.interfaces.vector_db import VectorDBClient
-from schemas.vector_schemas import DocumentChunk, SearchResult
+from app.data_access.interfaces.vector_db import VectorDBClient
+from app.schemas.vector_schemas import DocumentChunk, SearchResult
 
 class QdrantClient(VectorDBClient):
     """

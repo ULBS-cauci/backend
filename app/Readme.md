@@ -115,7 +115,7 @@ async def fetch_llm_response_async(prompt: str) -> dict:
 Hidden global states cause flakey tests and tightly coupled, brittle codebases. Furthermore, our business logic must never rely on specific vendor implementations (like Qdrant or OpenAI).
 
 * **Rule**: Resource clients MUST be injected via Contract Interfaces (Abstract Base Classes), never as their concrete client types.
-* **Enforcement**: Define the interface in data_access/interfaces/. Use FastAPI's Depends() in api/dependencies.py to yield the concrete implementation, but type-hint it as the interface in your Services. This makes it trivial to swap databases or inject mocks during pytest.
+* **Enforcement**: Define the interface in `data_access/interfaces/`. Use FastAPI's `Depends()` in `api/dependencies.py` to yield the concrete implementation using a **Factory Pattern** driven by environment variables (e.g., yielding `OllamaEmbeddingClient` when `EMBEDDING_CLIENT_TYPE=ollama`), but type-hint it as the interface in your Services. This makes it trivial to swap databases or inject mocks during pytest.
 
 Code Example:
 
@@ -188,26 +188,32 @@ LangChain is a powerful framework, but it is notoriously prone to "leaky abstrac
 * **Rule**: LangChain is strictly reserved for Prompt Templating, LLM Abstraction, and JSON Parsing. It is explicitly forbidden to use LangChain for Vector Database operations (e.g., do not use QdrantVectorStore).
 * **Why**: LangChain's generic retrieval interfaces break down the moment complex metadata filtering is required (e.g., filtering a search to a specific textbook chapter). Using the native qdrant-client SDK inside our custom repository preserves maximum performance and query control.
 
-### 5. Database Lifecycle (Engine vs. Session)
+### 5. Lifecycle Management: Database Engines & Network Connection Pools
 
-Handling database connections improperly in an async framework will cause catastrophic thread crashes and data bleed between users.
+Handling database connections or HTTP client pools improperly in an async framework will cause catastrophic thread crashes, memory leaks, and massive latency spikes due to reconnect overhead.
 
-* **Rule**: The Database Engine (Connection Pool) must be instantiated exactly once at application startup. The Database Session (Transaction Workspace) must be instantiated per-request via Dependency Injection.
-* **Enforcement**: Never store a Session globally.
+* **Rule**: The Database Engine (Connection Pool) and HTTP Client Pools (e.g., `httpx.AsyncClient`, `ollama.AsyncClient`) must be instantiated exactly once per application lifecycle and cached. The Database Session (Transaction Workspace) must be instantiated per-request via Dependency Injection.
+* **Enforcement**: Never store a Session globally. Always wrap the instantiation of network clients and DB engines inside an `@lru_cache()` decorated function within the `dependencies.py` IoC container.
 
 Code Example:
 
 ```Python
-# 1. GLOBAL ENGINE (Created once in data_access/clients/relational_db_client.py)
+# 1. CACHED GLOBAL ENGINE (api/dependencies.py)
+from functools import lru_cache
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-engine = create_async_engine("postgresql+asyncpg://user:pass@localhost/db", pool_size=20)
-AsyncSessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+@lru_cache()
+def get_db_engine():
+    # Built once, cached forever
+    return create_async_engine("postgresql+asyncpg://user:pass@localhost/db", pool_size=20)
 
 # 2. PER-REQUEST SESSION (api/dependencies.py)
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    engine = get_db_engine()
+    AsyncSessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    
     async with AsyncSessionLocal() as session:
         try:
             yield session
@@ -310,6 +316,16 @@ class UserPublic(UserBase):
     created_at: datetime
     # Notice: No passwords here! Safe to send to the frontend.
 ```
+
+### 7. AI Agent Instructions & Constraints
+*If you are an AI Coding Assistant or Agent working within this repository, you must read and adhere to these constraints before implementing any plan.*
+
+1. **Documentation Parity**: Whenever you add a new dependency, library, external API, or `.env` variable, you **MUST** simultaneously update `requirements.txt`, `app/Readme.md`, and any `.env.example`/configuration references. Code and documentation cannot diverge.
+2. **Framework Adherence Check**: Before writing business logic, verify your implementation strictly adheres to the **100% Asynchronous I/O** and **Strict Dependency Injection via Interfaces** rules defined above. Never use `requests`, `time.sleep()`, or global mutable state (like creating clients outside of `dependencies.py`).
+3. **IoC & Caching Protocol**: When adding new external clients (HTTP, Database, Redis, etc.), you must wrap their instantiation in an `@lru_cache()` decorated function within the `api/dependencies.py` IoC container to preserve connection pooling across requests. **Do not initialize network clients inside the routers or services.**
+4. **Langchain Boundaries**: You must strictly confine Langchain to prompt templating, LLM abstraction, and Output Parsers. **Do not create Langchain VectorStores**; rely strictly on our custom `IVectorDB` interfaces and native SDKs (e.g., `qdrant-client`, `ollama.AsyncClient`).
+5. **No Hallucinated Types**: When passing data across API boundaries or into Services, always use, modify, or create the appropriate Pydantic/SQLModel models located in `schemas/`. Do not pass raw dictionaries, and do not hallucinate schema functionality without reading the existing models.
+6. **Factory Pattern DI**: When introducing a new vendor for an existing service (e.g. OpenAI instead of Ollama), implement the interface, add the environment variable to `config.py`, and switch the dependency using an `if/else` block inside the provider function in `dependencies.py`.
 
 
 ## III. Recommendations for Future Enhancement

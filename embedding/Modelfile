@@ -1,0 +1,1 @@
+FROM hf.co/Qwen/Qwen3-Embedding-4B-GGUF:Q8_0
