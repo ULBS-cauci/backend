@@ -57,6 +57,8 @@ def get_llm_client(settings: Settings = Depends(get_settings)) -> LLMInterface:
     """
     if settings.LLM_CLIENT_TYPE == "openai":
         return _get_openai_client()
+    else:
+        raise ValueError(f"Unsupported LLM Client type: {settings.LLM_CLIENT_TYPE}")
     
 def get_embedding_client(settings: Settings = Depends(get_settings)) -> IEmbeddingClient:
     """
