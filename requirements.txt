@@ -3,3 +3,4 @@ pydantic-settings
 fastapi
 aioboto3
 ollama
+openai
