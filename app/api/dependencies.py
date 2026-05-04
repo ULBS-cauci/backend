@@ -10,6 +10,11 @@ from app.data_access.clients.embedding_client import OllamaEmbeddingClient
 from app.data_access.interfaces.llm import LLMInterface
 from app.data_access.clients.openai_client import OpenAILLMClient
 
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
+from sqlmodel.ext.asyncio.session import AsyncSession
+from typing import AsyncGenerator
+from app.data_access.interfaces.relational_db import IRelationalDB
+from app.data_access.clients.postgres_client import PostgresClient
 
 @lru_cache()
 def get_settings() -> Settings:
@@ -80,3 +85,34 @@ def get_embedding_client(
         raise ValueError(
             f"Unsupported Embedding Client type: {settings.EMBEDDING_CLIENT_TYPE}"
         )
+
+@lru_cache()
+def _get_async_engine() -> AsyncEngine:
+    """
+    Caches the SQLAlchemy/SQLModel AsyncEngine.
+    The engine manages the connection pool to PostgreSQL and should only be created once.
+    """
+    settings = get_settings()
+    database_url = f"postgresql+asyncpg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+    return create_async_engine(database_url, echo=False)
+
+async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Generates a fresh database session for each incoming request.
+    Handles commit automatically on success, and rollback on failure.
+    """
+    engine = _get_async_engine()
+    async with AsyncSession(engine) as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+def get_relational_db(session: AsyncSession = Depends(get_db_session)) -> IRelationalDB:
+    """
+    Injects the active database session into the concrete Postgres client,
+    but exposes it safely behind the generic IRelationalDB interface.
+    """
+    return PostgresClient(session)
