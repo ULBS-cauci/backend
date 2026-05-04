@@ -59,7 +59,7 @@ Ensure your `docker-compose.yml` uses the variables from your `.env` file. The P
 
 ```yaml
 services:
-  postgres_db:
+  postgres:
     image: postgres:15-alpine
     container_name: postgres_db
     restart: unless-stopped
@@ -107,8 +107,12 @@ Open DBeaver, pgAdmin, or the VS Code Database Client extension and connect usin
 - **Password:** `1234` (or whatever you set in `.env`)
 - **Database:** `postgres_db`
 
-### Method B: FastAPI Health Check
-Start your backend server (`uvicorn app.main:app --reload`) and visit your Swagger UI at `http://localhost:8000/docs` to test the database injection endpoint.
+### Method B: Backend Availability Check
+If you want to confirm the FastAPI app itself is running, start your backend server with `uvicorn app.main:app --reload` and open `http://localhost:8000/`.
+
+This only verifies that the backend process is up. It does **not** verify PostgreSQL connectivity, because the current app does not yet expose a database-backed endpoint in Swagger or elsewhere.
+
+Use **Method A** to verify that the database is reachable until a dedicated database health-check route is added.
 
 ## 7) Stop / Restart
 
@@ -170,7 +174,7 @@ docker compose ps
 
 Follow logs:
 ```bash
-docker compose logs -f postgres_db
+docker compose logs -f postgres
 ```
 
 Stop and remove container:
