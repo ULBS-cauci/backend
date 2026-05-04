@@ -12,6 +12,7 @@ from app.data_access.clients.openai_client import OpenAILLMClient
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.engine import URL  
 from typing import AsyncGenerator
 from app.data_access.interfaces.relational_db import IRelationalDB
 from app.data_access.clients.postgres_client import PostgresClient
@@ -93,9 +94,19 @@ def _get_async_engine() -> AsyncEngine:
     The engine manages the connection pool to PostgreSQL and should only be created once.
     """
     settings = get_settings()
-    database_url = f"postgresql+asyncpg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+    
+    database_url = URL.create(
+        drivername="postgresql+asyncpg",
+        username=settings.POSTGRES_USER,
+        password=settings.POSTGRES_PASSWORD,
+        host=settings.POSTGRES_HOST,
+        port=settings.POSTGRES_PORT,
+        database=settings.POSTGRES_DB
+    )
+    
     return create_async_engine(database_url, echo=False)
 
+    
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """
     Generates a fresh database session for each incoming request.
