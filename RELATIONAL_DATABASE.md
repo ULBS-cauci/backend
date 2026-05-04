@@ -24,7 +24,7 @@ You need all of the following:
 From your project root folder:
 
 ```bash
-cd ULBS-coach
+cd backend
 ```
 
 ## 2) Configure Environment Variables (.env)
@@ -118,7 +118,7 @@ Open DBeaver, pgAdmin, or the VS Code Database Client extension and connect usin
 - **Database:** `postgres_db`
 
 ### Method B: Backend Availability Check
-If you want to confirm the FastAPI app itself is running, start your backend server with `uvicorn app.main:app --reload` and open `http://localhost:8000/`.
+If you want to confirm the FastAPI app itself is running, start your backend server using the project's documented backend setup/start instructions, then open `http://localhost:8000/`.
 
 This only verifies that the backend process is up. It does **not** verify PostgreSQL connectivity, because the current app does not yet expose a database-backed endpoint in Swagger or elsewhere.
 
@@ -157,7 +157,7 @@ docker compose up -d
 ### Port 5432 already in use
 **Symptom:** Container fails to start.
 **Fix:** 1. Stop the local Postgres installation using `5432` on your machine.
-2. Or change mapping in `docker-compose.yml` (e.g., `"5433:5432"`) and update your `.env` port accordingly.
+2. Or change `POSTGRES_PORT` in your `.env` file (for example, to `5433`) and restart with `docker compose down` then `docker compose up -d`.
 
 ### Variable is not set (Defaulting to a blank string)
 **Symptom:** Yellow warning messages in the terminal when running `docker compose up -d`.
