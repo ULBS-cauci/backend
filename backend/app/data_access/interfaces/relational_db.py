@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import TypeVar, Type, Any, Optional, Sequence
 from sqlmodel import SQLModel
+from pydantic import BaseModel
 
-T = TypeVar("T", bound=SQLModel)
+T = TypeVar("T", bound=BaseModel)
 
 class IRelationalDB(ABC):
     """
