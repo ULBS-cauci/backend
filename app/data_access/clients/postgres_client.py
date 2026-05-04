@@ -11,12 +11,20 @@ class PostgresClient(IRelationalDB):
         self.session = session
 
     async def add(self, record: T) -> T:
+        """
+        Adds a new record to the session and flushes it to the database to populate 
+        auto-generated fields (e.g., primary keys).
+        
+        Note: This method does NOT commit the transaction. The caller (or the 
+        dependency injection session generator) is responsible for calling commit().
+        """
         self.session.add(record)
         await self.session.flush() 
+        await self.session.refresh(record)
         return record
 
     async def get(self, model_class: Type[T], record_id: Any) -> Optional[T]:
         return await self.session.get(model_class, record_id)
 
     async def execute(self, statement: Any) -> Any:
-        return await self.session.execute(statement)  
+        return await self.session.execute(statement)
