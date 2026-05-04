@@ -104,7 +104,7 @@ def _get_async_engine() -> AsyncEngine:
         database=settings.POSTGRES_DB
     )
     
-    return create_async_engine(database_url, echo=False)
+    return create_async_engine(database_url, echo=False, pool_pre_ping=True)
 
     
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
