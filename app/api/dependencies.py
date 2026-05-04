@@ -14,8 +14,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.engine import URL  
 from typing import AsyncGenerator
-from app.data_access.interfaces.relational_db import IRelationalDB
-from app.data_access.clients.postgres_client import PostgresClient
+
 
 @lru_cache()
 def get_settings() -> Settings:
@@ -120,10 +119,3 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
-
-def get_relational_db(session: AsyncSession = Depends(get_db_session)) -> IRelationalDB:
-    """
-    Injects the active database session into the concrete Postgres client,
-    but exposes it safely behind the generic IRelationalDB interface.
-    """
-    return PostgresClient(session)

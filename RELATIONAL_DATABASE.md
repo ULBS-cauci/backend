@@ -47,7 +47,13 @@ Create or open your local `.env` file (do not commit this file) and set your rea
 POSTGRES_USER=admin
 POSTGRES_PASSWORD=1234
 POSTGRES_DB=postgres_db
+POSTGRES_HOST=localhost       # Use 'localhost' for local development on host machine
+POSTGRES_PORT=5432
 ```
+
+**Note on POSTGRES_HOST:**
+- Use `localhost` if running your FastAPI app directly on your host machine
+- Use `postgres` if running your FastAPI app inside a Docker container (container-to-container communication)
 
 **Important:**
 - `POSTGRES_PASSWORD` must not be empty.
@@ -72,6 +78,10 @@ services:
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
 ```
+
+**Port Mapping Explanation:**
+- The `ports: "5432:5432"` mapping allows your host machine to reach PostgreSQL on `localhost:5432`
+- Inside Docker containers on the same network, use the service name `postgres` as the hostname
 
 ## 4) Start PostgreSQL
 
@@ -101,7 +111,7 @@ PostgreSQL does not speak HTTP, so **you cannot check it in a web browser**. Ver
 
 ### Method A: Database Client (Recommended)
 Open DBeaver, pgAdmin, or the VS Code Database Client extension and connect using:
-- **Host:** `localhost`
+- **Host:** `localhost` (your host machine's hostname; use `postgres` only if your client is inside a Docker container)
 - **Port:** `5432`
 - **User:** `admin`
 - **Password:** `1234` (or whatever you set in `.env`)
