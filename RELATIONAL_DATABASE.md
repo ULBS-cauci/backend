@@ -19,15 +19,7 @@ You need all of the following:
 3. Port `5432` free on your machine.
 4. Python virtual environment created and activated.
 
-## 1) Open Terminal in This Folder
-
-From your project root folder:
-
-```bash
-cd backend
-```
-
-## 2) Configure Environment Variables (.env)
+## 1) Configure Environment Variables (.env)
 
 Your Docker container and Python app both read database credentials from your `.env` file. 
 
@@ -59,7 +51,7 @@ POSTGRES_PORT=5432
 - `POSTGRES_PASSWORD` must not be empty.
 - Keep production secrets outside git.
 
-## 3) Verify Docker Compose Configuration
+## 2) Verify Docker Compose Configuration
 
 Ensure your `docker-compose.yml` uses the variables from your `.env` file. The PostgreSQL service should look like this:
 
@@ -83,12 +75,12 @@ services:
 - The `ports: "5432:5432"` mapping allows your host machine to reach PostgreSQL on `localhost:5432`
 - Inside Docker containers on the same network, use the service name `postgres` as the hostname
 
-## 4) Start PostgreSQL
+## 3) Start PostgreSQL
 
-Run this command in the same folder as `docker-compose.yml`:
+Run this command in the same folder as `docker-compose.yml` to start only PostgreSQL:
 
 ```bash
-docker compose up -d
+docker compose up -d postgres
 ```
 
 What this does:
@@ -97,7 +89,12 @@ What this does:
 - Maps local port `5432` to container port `5432`.
 - Creates a local folder `postgres_data` so your tables and rows survive container restarts.
 
-## 5) Check Container Status
+**Note:** If you want to start all services (PostgreSQL, MinIO, and Qdrant) instead, use:
+```bash
+docker compose up -d
+```
+
+## 4) Check Container Status
 
 ```bash
 docker compose ps
@@ -105,7 +102,7 @@ docker compose ps
 
 You should see service `postgres_db` as `Up`.
 
-## 6) Verify Database Is Reachable
+## 5) Verify Database Is Reachable
 
 PostgreSQL does not speak HTTP, so **you cannot check it in a web browser**. Verify it using one of these methods:
 
@@ -124,23 +121,35 @@ This only verifies that the backend process is up. It does **not** verify Postgr
 
 Use **Method A** to verify that the database is reachable until a dedicated database health-check route is added.
 
-## 7) Stop / Restart
+## 6) Stop / Restart
 
-Stop container safely:
+Stop only PostgreSQL:
+
+```bash
+docker compose stop postgres
+```
+
+Stop and remove only the PostgreSQL container:
+
+```bash
+docker compose down postgres
+```
+
+Stop all services:
 
 ```bash
 docker compose down
 ```
 
-Start again:
+Start PostgreSQL again:
 
 ```bash
-docker compose up -d
+docker compose up -d postgres
 ```
 
 Data remains intact because of volume mapping: `./postgres_data:/var/lib/postgresql/data`
 
-## 8) Reset Local Data (Danger)
+## 7) Reset Local Data (Danger)
 
 If you want a completely clean relational database, stop the container and remove the local data folder:
 
