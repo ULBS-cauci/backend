@@ -62,7 +62,7 @@ services:
     container_name: postgres_db
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -72,7 +72,7 @@ services:
 ```
 
 **Port Mapping Explanation:**
-- The `ports: "5432:5432"` mapping allows your host machine to reach PostgreSQL on `localhost:5432`
+- The `ports: "${POSTGRES_PORT:-5432}:5432"` mapping allows your host machine to reach PostgreSQL on `localhost:${POSTGRES_PORT}` (defaults to `5432` if not set)
 - Inside Docker containers on the same network, use the service name `postgres` as the hostname
 
 ## 3) Start PostgreSQL
@@ -166,8 +166,8 @@ docker compose up -d
 ### Port 5432 already in use
 **Symptom:** Container fails to start.
 **Fix:** 1. Stop the local Postgres installation using `5432` on your machine.
-2. Or use a different host port, but update both places: set `POSTGRES_PORT` in your `.env` file (for example, to `5433`) **and** change the published port in `docker-compose.yml` from `5432:5432` to `5433:5432` (or the equivalent variable-based mapping).
-3. Then restart with `docker compose down` followed by `docker compose up -d`.
+2. Or use a different host port by setting `POSTGRES_PORT` in your `.env` file (for example, to `5433`). The `docker-compose.yml` already reads this variable, so no manual edits to that file are needed.
+3. Then restart with `docker compose stop postgres` followed by `docker compose up -d postgres`.
 
 ### Variable is not set (Defaulting to a blank string)
 **Symptom:** Yellow warning messages in the terminal when running `docker compose up -d`.
@@ -197,7 +197,7 @@ Follow logs:
 docker compose logs -f postgres
 ```
 
-Stop and remove container:
+Stop and remove only the PostgreSQL container:
 ```bash
-docker compose down
+docker compose rm -sf postgres
 ```
