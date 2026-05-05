@@ -132,7 +132,7 @@ docker compose stop postgres
 Stop and remove only the PostgreSQL container:
 
 ```bash
-docker compose down postgres
+docker compose rm -sf postgres
 ```
 
 Stop all services:
@@ -166,7 +166,8 @@ docker compose up -d
 ### Port 5432 already in use
 **Symptom:** Container fails to start.
 **Fix:** 1. Stop the local Postgres installation using `5432` on your machine.
-2. Or change `POSTGRES_PORT` in your `.env` file (for example, to `5433`) and restart with `docker compose down` then `docker compose up -d`.
+2. Or use a different host port, but update both places: set `POSTGRES_PORT` in your `.env` file (for example, to `5433`) **and** change the published port in `docker-compose.yml` from `5432:5432` to `5433:5432` (or the equivalent variable-based mapping).
+3. Then restart with `docker compose down` followed by `docker compose up -d`.
 
 ### Variable is not set (Defaulting to a blank string)
 **Symptom:** Yellow warning messages in the terminal when running `docker compose up -d`.
