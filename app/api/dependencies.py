@@ -103,7 +103,9 @@ def _get_async_engine() -> AsyncEngine:
         database=settings.POSTGRES_DB
     )
     
-    return create_async_engine(database_url, echo=False, pool_pre_ping=True)
+    # pool_size can be tuned based on expected load and database capacity
+    # If you encounter connection issues under load, consider increasing pool_size and max_overflow, but be mindful of the database's max connections limit.
+    return create_async_engine(database_url, echo=False, pool_pre_ping=True, pool_size=5, max_overflow=50)
 
     
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
