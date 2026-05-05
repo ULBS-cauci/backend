@@ -70,3 +70,6 @@ qdrant_data/
 minio_data/
 
 scripts/
+
+#PostgreSQL local data
+postgres_data/
