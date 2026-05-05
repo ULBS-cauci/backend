@@ -1,6 +1,6 @@
 qdrant-client
 pydantic-settings
-fastapi
+fastapi[standard]
 aioboto3
 ollama
 openai
