@@ -10,10 +10,10 @@ class Settings(BaseSettings):
 
     # Object Storage
     OBJECT_STORAGE_TYPE: str
-    OBJECT_STORAGE_ENDPOINT: str
-    OBJECT_STORAGE_ACCESS_KEY: str
-    OBJECT_STORAGE_SECRET_KEY: str
-    OBJECT_STORAGE_USE_SSL: bool = True
+    MINIO_ENDPOINT: str
+    MINIO_USER: str
+    MINIO_PASSWORD: str
+    MINIO_USE_SSL: bool = True
 
     # General Embedding Client Selection (e.g., "ollama", "openai")
     EMBEDDING_CLIENT_TYPE: str
