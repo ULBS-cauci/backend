@@ -7,9 +7,9 @@ services:
     restart: unless-stopped
     ports:
       - "6333:6333"
-    environment:
-      # Optional for local development, uncomment and set in production
-      # - QDRANT__SERVICE__API_KEY=<set_your_api_key>
+    # Uncomment to set an API key in production:
+    # environment:
+    #   - QDRANT__SERVICE__API_KEY=<set_your_api_key>
     volumes:
       - ./data/qdrant_data:/qdrant/storage
 
