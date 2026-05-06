@@ -11,15 +11,15 @@ class _Base(BaseSettings):
 class AppSettings(_Base):
     """Provider selectors — controls which concrete client is wired per interface.
     All fields have defaults, so this class never raises a ValidationError at startup."""
-    VECTOR_DB_TYPE: str = "qdrant"
+    VECTOR_DB_CLIENT_TYPE: str = "qdrant"
     EMBEDDING_CLIENT_TYPE: str = "ollama"
     LLM_CLIENT_TYPE: str = "openai"
-    OBJECT_STORAGE_TYPE: str = "minio"
+    OBJECT_STORAGE_CLIENT_TYPE: str = "minio"
 
 
 class QdrantSettings(_Base):
     VECTOR_DB_ENDPOINT: str
-    VECTOR_DB_SERVICE_API_KEY: Optional[str] = None
+    VECTOR_DB_API_KEY: Optional[str] = None
 
 
 class OllamaSettings(_Base):
@@ -30,7 +30,7 @@ class OllamaSettings(_Base):
 class OpenAISettings(_Base):
     OPENAI_API_KEY: str
     OPENAI_LLM_MODEL: str = "gpt-4o-mini"
-    LLM_TEMPERATURE: float = 0.2
+    OPENAI_TEMPERATURE: float = 0.2
 
 
 class MinIOSettings(_Base):

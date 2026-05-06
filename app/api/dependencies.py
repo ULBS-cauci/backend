@@ -11,7 +11,7 @@ from app.core.config import (
 from app.data_access.clients.qdrant_client import QdrantClient
 from app.data_access.interfaces.vector_db import VectorDBInterface
 
-from app.data_access.interfaces.embedding import IEmbeddingClient
+from app.data_access.interfaces.embedding import EmbeddingClientInterface
 from app.data_access.clients.embedding_client import OllamaEmbeddingClient
 
 from app.data_access.interfaces.llm import LLMInterface
@@ -37,7 +37,7 @@ def _get_qdrant_client() -> QdrantClient:
     """Caches the Qdrant connection pool per application lifecycle."""
     settings = QdrantSettings()
     return QdrantClient(
-        endpoint=settings.VECTOR_DB_ENDPOINT, api_key=settings.VECTOR_DB_SERVICE_API_KEY
+        endpoint=settings.VECTOR_DB_ENDPOINT, api_key=settings.VECTOR_DB_API_KEY
     )
 
 
@@ -45,9 +45,9 @@ def get_vector_db_client(
     app: AppSettings = Depends(get_app_settings),
 ) -> VectorDBInterface:
     """Yields the configured Vector Database client."""
-    if app.VECTOR_DB_TYPE == "qdrant":
+    if app.VECTOR_DB_CLIENT_TYPE == "qdrant":
         return _get_qdrant_client()
-    raise ValueError(f"Unsupported Vector Database type: {app.VECTOR_DB_TYPE}")
+    raise ValueError(f"Unsupported Vector Database type: {app.VECTOR_DB_CLIENT_TYPE}")
 
 
 @lru_cache()
@@ -64,7 +64,7 @@ def _get_openai_llm_client() -> OpenAILLMClient:
     return OpenAILLMClient(
         api_key=settings.OPENAI_API_KEY,
         model=settings.OPENAI_LLM_MODEL,
-        temperature=settings.LLM_TEMPERATURE,
+        temperature=settings.OPENAI_TEMPERATURE,
     )
 
 
@@ -77,7 +77,7 @@ def get_llm_client(app: AppSettings = Depends(get_app_settings)) -> LLMInterface
 
 def get_embedding_client(
     app: AppSettings = Depends(get_app_settings),
-) -> IEmbeddingClient:
+) -> EmbeddingClientInterface:
     """Yields the configured Embedding client. Typed against the ABC interface."""
     if app.EMBEDDING_CLIENT_TYPE == "ollama":
         return _get_ollama_embedding_client()
@@ -105,9 +105,9 @@ def get_object_storage_client(
     app: AppSettings = Depends(get_app_settings),
 ) -> ObjectStorageInterface:
     """Yields the configured Object Storage client."""
-    if app.OBJECT_STORAGE_TYPE == "minio":
+    if app.OBJECT_STORAGE_CLIENT_TYPE == "minio":
         return _get_minio_client()
-    raise ValueError(f"Unsupported Object Storage type: {app.OBJECT_STORAGE_TYPE}")
+    raise ValueError(f"Unsupported Object Storage type: {app.OBJECT_STORAGE_CLIENT_TYPE}")
 
 
 @lru_cache()

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List
 
-class IEmbeddingClient(ABC):
+class EmbeddingClientInterface(ABC):
     """
     Abstract Base Class for Embedding generation.
     Any custom integration (Ollama, OpenAI, Claude, etc.) must implement these methods.

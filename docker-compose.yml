@@ -9,7 +9,7 @@ services:
       - "6333:6333"
     # Uncomment to set an API key in production:
     # environment:
-    #   - QDRANT__SERVICE__API_KEY=<set_your_api_key>
+    #   - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY}
     volumes:
       - ./data/qdrant_data:/qdrant/storage
 

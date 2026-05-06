@@ -1,45 +1,56 @@
 # AI Tutor Backend: Architectural Specification
 
 ## I. Architecture & System Flow
-*What the application does, how data moves through the system, and its structural layout.*
+
+_What the application does, how data moves through the system, and its structural layout._
 
 ### 1. Overview
-This document outlines the architectural design, processing pipeline, and software engineering principles for a highly scalable, RAG-based AI Tutor. The system is designed to process university textbooks and notes, allowing students to prompt the chatbot for specific study outputs (quizzes, info cards, detailed explanations). 
+
+This document outlines the architectural design, processing pipeline, and software engineering principles for a highly scalable, RAG-based AI Tutor. The system is designed to process university textbooks and notes, allowing students to prompt the chatbot for specific study outputs (quizzes, info cards, detailed explanations).
 
 The architecture prioritizes modularity, testability, and robust memory management over premature framework complexity (e.g., deferring LangGraph until non-linear agentic loops are strictly required).
 
 ### 2. The Prompt Processing Pipeline
+
 When a user submits a prompt, the system executes the following linear flow orchestrated by the Business Logic (Service) layer:
-* **A. Input Processing & Validation:** The API endpoint receives the user's query and requested output format. The system initializes a study session and fetches recent conversation history. Validating early ensures bad payloads don't waste compute.
-* **B. Query Transformation & Conditional Routing:** The raw user query is first evaluated using a lightweight heuristic check(or a cheap classifier prompt or small model score, then fallback to heuristic only. Heuristic could miss more often.) to determine if it relies on previous chat context (e.g., checking for pronouns like "it" or "this"). If context resolution is required, the raw query and the chat history are passed to a QueryRewriter powered by a dedicated high-speed, low-cost model to minimize latency. It condenses the conversation into a highly specific, standalone search query, allowing the Vector DB to match accurately. If the query is entirely self-contained, the rewriter is bypassed entirely to save compute and reduce Time to First Token (TTFT), and the raw query is passed directly to the retrieval phase.
-* **C. Hybrid Retrieval & Fusion Strategy:** The system executes a parallel retrieval process:
-    * Semantic Search: The optimized query is embedded via the EmbeddingClient and sent to Qdrant to find conceptual matches.
 
-    * Lexical Search (BM25): Simultaneously, the system performs a keyword-based search to capture exact terminology, acronyms, and unique identifiers.
+- **A. Input Processing & Validation:** The API endpoint receives the user's query and requested output format. The system initializes a study session and fetches recent conversation history. Validating early ensures bad payloads don't waste compute.
+- **B. Query Transformation & Conditional Routing:** The raw user query is first evaluated using a lightweight heuristic check(or a cheap classifier prompt or small model score, then fallback to heuristic only. Heuristic could miss more often.) to determine if it relies on previous chat context (e.g., checking for pronouns like "it" or "this"). If context resolution is required, the raw query and the chat history are passed to a QueryRewriter powered by a dedicated high-speed, low-cost model to minimize latency. It condenses the conversation into a highly specific, standalone search query, allowing the Vector DB to match accurately. If the query is entirely self-contained, the rewriter is bypassed entirely to save compute and reduce Time to First Token (TTFT), and the raw query is passed directly to the retrieval phase.
+- **C. Hybrid Retrieval & Fusion Strategy:** The system executes a parallel retrieval process:
+  - Semantic Search: The optimized query is embedded via the EmbeddingClient and sent to Qdrant to find conceptual matches.
 
-    * Reciprocal Rank Fusion (RRF): The results from both searches—which use different scoring scales—are merged using the RRF algorithm. This normalizes the scores to create a single, prioritized list of the most relevant chunks.
+  - Lexical Search (BM25): Simultaneously, the system performs a keyword-based search to capture exact terminology, acronyms, and unique identifiers.
 
-    * (Optional) Cross-Encoder Re-ranking: To ensure maximum precision, the top-scoring fused results are passed through a Re-ranker model that evaluates the direct relationship between the query and each chunk, filtering out low-relevance noise.
-* **D. Prompt Assembly (Dynamic Context):** The retrieved chunks are evaluated. If no relevant chunks are found, the system triggers the **"I don't know" fallback**, preventing hallucinations. If relevant chunks exist, a `ContextBuilder` formats the chunks and the requested output type into a final system prompt.  
->In the future, define strict retrieval thresholds and fallback tiers:
->1. high confidence: answer with citations
->2. medium confidence: answer with uncertainty + clarifying question
->3. low confidence: “I don’t know”
-* **E. Generation & Streaming:** The assembled prompt is sent to the LLM. The response is yielded asynchronously and streamed back to the client via Server-Sent Events (SSE).
+  - Reciprocal Rank Fusion (RRF): The results from both searches—which use different scoring scales—are merged using the RRF algorithm. This normalizes the scores to create a single, prioritized list of the most relevant chunks.
+
+  - (Optional) Cross-Encoder Re-ranking: To ensure maximum precision, the top-scoring fused results are passed through a Re-ranker model that evaluates the direct relationship between the query and each chunk, filtering out low-relevance noise.
+
+- **D. Prompt Assembly (Dynamic Context):** The retrieved chunks are evaluated. If no relevant chunks are found, the system triggers the **"I don't know" fallback**, preventing hallucinations. If relevant chunks exist, a `ContextBuilder` formats the chunks and the requested output type into a final system prompt.
+  > In the future, define strict retrieval thresholds and fallback tiers:
+  >
+  > 1.  high confidence: answer with citations
+  > 2.  medium confidence: answer with uncertainty + clarifying question
+  > 3.  low confidence: “I don’t know”
+- **E. Generation & Streaming:** The assembled prompt is sent to the LLM. The response is yielded asynchronously and streamed back to the client via Server-Sent Events (SSE).
 
 ### 3. Chat History & Memory Management
+
 Memory is split into two distinct mechanisms to balance context-awareness with token economy:
-* **A. Storage (Keep Everything):** Every user interaction is saved into a PostgreSQL `chat_messages` table, tied to a unique `session_id` for analytics and fine-tuning.
-* **B. Injection (The Sliding Window):** Only the $N$ most recent messages are retrieved, measured via a token counter, and injected into the LLM prompt to prevent context limits being exceeded.
+
+- **A. Storage (Keep Everything):** Every user interaction is saved into a PostgreSQL `chat_messages` table, tied to a unique `session_id` for analytics and fine-tuning.
+- **B. Injection (The Sliding Window):** Only the $N$ most recent messages are retrieved, measured via a token counter, and injected into the LLM prompt to prevent context limits being exceeded.
 
 ### 4. RESTful API Blueprint
+
 The application exposes a standard RESTful API. Endpoints are grouped by domain noun.
-* **A. Authentication & Users (`/auth`, `/users`):** Handles identity and preferences.
-* **B. Chat Sessions (`/sessions`):** Manages the study history and core AI interactions (Includes the Core RAG `/ask` endpoint).
-* **C. Knowledge Base & Files (`/files`):** Manages ingestion of textbooks/notes into the vector database.
-* **D. System Configuration (`/admin`):** Allows dynamic adjustment of AI behavior.
+
+- **A. Authentication & Users (`/auth`, `/users`):** Handles identity and preferences.
+- **B. Chat Sessions (`/sessions`):** Manages the study history and core AI interactions (Includes the Core RAG `/ask` endpoint).
+- **C. Knowledge Base & Files (`/files`):** Manages ingestion of textbooks/notes into the vector database.
+- **D. System Configuration (`/admin`):** Allows dynamic adjustment of AI behavior.
 
 ### 5. Scalable Folder Structure
+
 To support the modular REST API and background file processing, the current directory structure is:
 
 ```text
@@ -48,10 +59,10 @@ app/
 ├── api/                        # Controllers (HTTP layer)
 │   ├── dependencies.py         # FastAPI Depends() definitions (Auth, DB session)
 │   └── routers/                # Modular API grouping
-│       ├── admin.py            
-│       ├── auth.py             
-│       ├── files.py            
-│       └── sessions.py         
+│       ├── admin.py
+│       ├── auth.py
+│       ├── files.py
+│       └── sessions.py
 ├── data_access/                # Infrastructure / Data Access Layer
 │   ├── clients/                # Concrete adapters to external systems
 │   │   ├── relational_db_client.py # PostgreSQL connection pool
@@ -73,9 +84,9 @@ app/
 ├── schemas/                    # Pydantic classes (domain/API validation)
 │   └── vector_schemas.py
 ├── services/                   # Business Logic Orchestration
-│   ├── auth_service.py         
+│   ├── auth_service.py
 │   ├── chat_service.py         # Ties together routers <-> rag_engine <-> data_access
-│   └── file_service.py         
+│   └── file_service.py
 └── workers/                    # Background Tasks
     └── ingestion_worker.py     # Heavy lifting: PDF parsing, chunking, and embedding
 ```
@@ -88,8 +99,8 @@ app/
 
 To allow high concurrency during slow network/LLM requests, blocking code is forbidden on the main thread.
 
-* **Rule**: Every database query, network call, and file read/write MUST use async/await.
-* **Enforcement**: Never use requests, use httpx or aiohttp. Never use time.sleep(), use asyncio.sleep(). DB operations must use async drivers (like asyncpg). Workloads that are heavily CPU-bound (like parsing giant PDFs) should be offloaded to workers/ or executed via asyncio.run_in_executor.
+- **Rule**: Every database query, network call, and file read/write MUST use async/await.
+- **Enforcement**: Never use requests, use httpx or aiohttp. Never use time.sleep(), use asyncio.sleep(). DB operations must use async drivers (like asyncpg). Workloads that are heavily CPU-bound (like parsing giant PDFs) should be offloaded to workers/ or executed via asyncio.run_in_executor.
 
 Code Example:
 
@@ -109,13 +120,12 @@ async def fetch_llm_response_async(prompt: str) -> dict:
         return response.json()
 ```
 
-    
 ### 2. Strict Dependency Injection (DI) via Interfaces
 
 Hidden global states cause flakey tests and tightly coupled, brittle codebases. Furthermore, our business logic must never rely on specific vendor implementations (like Qdrant or OpenAI).
 
-* **Rule**: Resource clients MUST be injected via Contract Interfaces (Abstract Base Classes), never as their concrete client types.
-* **Enforcement**: Define the interface in `data_access/interfaces/`. Use FastAPI's `Depends()` in `api/dependencies.py` to yield the concrete implementation using a **Factory Pattern** driven by environment variables (e.g., yielding `OllamaEmbeddingClient` when `EMBEDDING_CLIENT_TYPE=ollama`), but type-hint it as the interface in your Services. This makes it trivial to swap databases or inject mocks during pytest.
+- **Rule**: Resource clients MUST be injected via Contract Interfaces (Abstract Base Classes), never as their concrete client types.
+- **Enforcement**: Define the interface in `data_access/interfaces/`. Use FastAPI's `Depends()` in `api/dependencies.py` to yield the concrete implementation using a **Factory Pattern** driven by environment variables (e.g., yielding `OllamaEmbeddingClient` when `EMBEDDING_CLIENT_TYPE=ollama`), but type-hint it as the interface in your Services. This makes it trivial to swap databases or inject mocks during pytest.
 
 Code Example:
 
@@ -139,11 +149,11 @@ from fastapi import Depends
 
 def get_vector_db() -> IVectorDB:
     # We yield the concrete class, but FastAPI treats it as the Interface
-    return QdrantRepository() 
+    return QdrantRepository()
 
 # 4. Use it decoupled (services/chat_service.py)
 class ChatService:
-    # Notice: The service knows NOTHING about Qdrant. 
+    # Notice: The service knows NOTHING about Qdrant.
     # It only knows it has an object that can .search()
     def __init__(self, vector_db: IVectorDB):
         self.vector_db = vector_db
@@ -153,8 +163,8 @@ class ChatService:
 
 Python is dynamic, but this codebase operates under strict type-checking assumptions to catch errors before runtime.
 
-* **Rule**: All function signatures must include type hints for arguments and return types.
-* **Enforcement**: Data traversing the API boundary (Input/Output) MUST be validated using Pydantic models located in schemas/. Do not pass raw dictionaries around the application.
+- **Rule**: All function signatures must include type hints for arguments and return types.
+- **Enforcement**: Data traversing the API boundary (Input/Output) MUST be validated using Pydantic models located in schemas/. Do not pass raw dictionaries around the application.
 
 Code Example:
 
@@ -185,15 +195,15 @@ async def ask_question(payload: AskRequest) -> dict:
 
 LangChain is a powerful framework, but it is notoriously prone to "leaky abstractions" when used for database operations. It must be strictly confined to the AI Formatting Layer.
 
-* **Rule**: LangChain is strictly reserved for Prompt Templating, LLM Abstraction, and JSON Parsing. It is explicitly forbidden to use LangChain for Vector Database operations (e.g., do not use QdrantVectorStore).
-* **Why**: LangChain's generic retrieval interfaces break down the moment complex metadata filtering is required (e.g., filtering a search to a specific textbook chapter). Using the native qdrant-client SDK inside our custom repository preserves maximum performance and query control.
+- **Rule**: LangChain is strictly reserved for Prompt Templating, LLM Abstraction, and JSON Parsing. It is explicitly forbidden to use LangChain for Vector Database operations (e.g., do not use QdrantVectorStore).
+- **Why**: LangChain's generic retrieval interfaces break down the moment complex metadata filtering is required (e.g., filtering a search to a specific textbook chapter). Using the native qdrant-client SDK inside our custom repository preserves maximum performance and query control.
 
 ### 5. Lifecycle Management: Database Engines & Network Connection Pools
 
 Handling database connections or HTTP client pools improperly in an async framework will cause catastrophic thread crashes, memory leaks, and massive latency spikes due to reconnect overhead.
 
-* **Rule**: The Database Engine (Connection Pool) and HTTP Client Pools (e.g., `httpx.AsyncClient`, `ollama.AsyncClient`) must be instantiated exactly once per application lifecycle and cached. The Database Session (Transaction Workspace) must be instantiated per-request via Dependency Injection.
-* **Enforcement**: Never store a Session globally. Always wrap the instantiation of network clients and DB engines inside an `@lru_cache()` decorated function within the `dependencies.py` IoC container.
+- **Rule**: The Database Engine (Connection Pool) and HTTP Client Pools (e.g., `httpx.AsyncClient`, `ollama.AsyncClient`) must be instantiated exactly once per application lifecycle and cached. The Database Session (Transaction Workspace) must be instantiated per-request via Dependency Injection.
+- **Enforcement**: Never store a Session globally. Always wrap the instantiation of network clients and DB engines inside an `@lru_cache()` decorated function within the `dependencies.py` IoC container.
 
 Code Example:
 
@@ -213,7 +223,7 @@ def get_db_engine():
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     engine = get_db_engine()
     AsyncSessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
-    
+
     async with AsyncSessionLocal() as session:
         try:
             yield session
@@ -227,10 +237,10 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 We use SQLModel instead of raw SQLAlchemy for our relational database.
 
-* **What it is**: SQLModel is a library written by the creator of FastAPI. It combines standard SQLAlchemy (for database tables) with Pydantic (for API data validation) into a single tool.
-* **Why we use it**: Normally, you have to write two identical classes: a User class for the database, and a UserSchema class for the API. SQLModel lets you write one class that does both, cutting boilerplate code in half. The sepparation is still posible by just omiting ```table=True``` in the definition of the class.
+- **What it is**: SQLModel is a library written by the creator of FastAPI. It combines standard SQLAlchemy (for database tables) with Pydantic (for API data validation) into a single tool.
+- **Why we use it**: Normally, you have to write two identical classes: a User class for the database, and a UserSchema class for the API. SQLModel lets you write one class that does both, cutting boilerplate code in half. The separation is still possible by just omiting `table=True` in the definition of the class.
 
-* **Rule**: All relational database tables and core API schemas must be defined using sqlmodel.SQLModel.
+- **Rule**: All relational database tables and core API schemas must be defined using sqlmodel.SQLModel.
 
 Code Example:
 
@@ -253,7 +263,7 @@ class User(UserBase, table=True):
 # 3. The API Schema / DTO (table=False by default)
 class UserPublic(UserBase):
     id: int
-    # Notice hashed_password is NOT here. 
+    # Notice hashed_password is NOT here.
     # FastAPI will use this to strip the password before sending JSON to the frontend!
 
 # Let's make a Chat Session table
@@ -271,7 +281,7 @@ async def create_session(session_data: ChatSession, db: AsyncSession = Depends(g
     return session_data
 ```
 
-Ideea for ```schemas/user_schemas.py```
+Idea for `schemas/user_schemas.py`
 
 ```py
 from sqlmodel import SQLModel, Field
@@ -300,7 +310,7 @@ class User(UserBase, table=True):
 # ---------------------------------------------------------
 class UserCreate(UserBase):
     # The user MUST send a raw password to register
-    password: str 
+    password: str
     # Notice: No 'is_admin' field here! They cannot make themselves an admin.
 
 class UserUpdate(SQLModel):
@@ -318,7 +328,8 @@ class UserPublic(UserBase):
 ```
 
 ### 7. AI Agent Instructions & Constraints
-*If you are an AI Coding Assistant or Agent working within this repository, you must read and adhere to these constraints before implementing any plan.*
+
+_If you are an AI Coding Assistant or Agent working within this repository, you must read and adhere to these constraints before implementing any plan._
 
 1. **Documentation Parity**: Whenever you add a new dependency, library, external API, or `.env` variable, you **MUST** simultaneously update `requirements.txt`, `app/Readme.md`, and any `.env.example`/configuration references. Code and documentation cannot diverge.
 2. **Framework Adherence Check**: Before writing business logic, verify your implementation strictly adheres to the **100% Asynchronous I/O** and **Strict Dependency Injection via Interfaces** rules defined above. Never use `requests`, `time.sleep()`, or global mutable state (like creating clients outside of `dependencies.py`).
@@ -327,12 +338,38 @@ class UserPublic(UserBase):
 5. **No Hallucinated Types**: When passing data across API boundaries or into Services, always use, modify, or create the appropriate Pydantic/SQLModel models located in `schemas/`. Do not pass raw dictionaries, and do not hallucinate schema functionality without reading the existing models.
 6. **Factory Pattern DI**: When introducing a new vendor for an existing service (e.g. OpenAI instead of Ollama), implement the interface, add the environment variable to `config.py`, and switch the dependency using an `if/else` block inside the provider function in `dependencies.py`.
 
-
 ## III. Recommendations for Future Enhancement
-*Strategic improvements and features planned for near-term implementation.*
+
+_Strategic improvements and features planned for near-term implementation._
 
 ### 1. Production Readiness Roadmap
-* **Observability & Tracing:** Integrate a tracing layer (e.g., LangSmith, Phoenix, or OpenTelemetry) to monitor chunk retrieval quality, prompt construction details, and exact token usage per request.
-* **Ingestion Strategy:** Establish explicit document chunking strategies. Textbook structures require specific parsing (e.g., Markdown-aware or Semantic chunking) rather than basic recursive character splitting.
-* **Continuous RAG Evaluation:** Establish an automated CI/CD evaluation pipeline (using tools like Ragas or TruLens) to regularly regression-test precision, recall, and AI faithfulness to the source material.
-* **Rate Limiting & Abuse Prevention:** Implement robust rate-limiting at the `api/` layer (e.g., using Redis caching) to protect expensive LLM and Vector DB calls.
+
+- **Observability & Tracing:** Integrate a tracing layer (e.g., LangSmith, Phoenix, or OpenTelemetry) to monitor chunk retrieval quality, prompt construction details, and exact token usage per request.
+- **Ingestion Strategy:** Establish explicit document chunking strategies. Textbook structures require specific parsing (e.g., Markdown-aware or Semantic chunking) rather than basic recursive character splitting.
+- **Continuous RAG Evaluation:** Establish an automated CI/CD evaluation pipeline (using tools like Ragas or TruLens) to regularly regression-test precision, recall, and AI faithfulness to the source material.
+- **Rate Limiting & Abuse Prevention:** Implement robust rate-limiting at the `api/` layer (e.g., using Redis caching) to protect expensive LLM and Vector DB calls.
+
+## IV. Standards & Conventions
+
+_Naming rules and formatting requirements that apply across the entire codebase._
+
+### 1. Formatting
+
+- Use the **Black Formatter** VS Code extension. Set it as the default Python formatter.
+
+### 2. Naming Conventions
+
+#### Interfaces
+
+- Abstract base classes follow the pattern `<ClassName>Interface` (e.g. `VectorDBInterface`).
+- Interface files follow the pattern `<service_name>.py` (e.g. `vector_db.py`).
+
+#### Clients
+
+- Concrete client classes follow the pattern `<ServiceName>Client` (e.g. `OllamaEmbeddingClient`).
+- Client files follow the pattern `<service_name>_client.py` (e.g. `embedding_client.py`).
+
+#### Environment Variables
+
+- The provider selector for each interface follows the pattern `<INTERFACE>_CLIENT_TYPE` (e.g. `EMBEDDING_CLIENT_TYPE`).
+- All other env vars scoped to a specific service follow the pattern `<SERVICE>_*` (e.g. `OLLAMA_HOST`, `OLLAMA_EMBED_MODEL`).
