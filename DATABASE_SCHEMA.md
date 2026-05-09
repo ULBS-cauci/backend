@@ -50,7 +50,7 @@ erDiagram
     messages {
         UUID id PK
         UUID conversation_id FK "Ref: conversations.id"
-        string role "User, System, AI"
+        string role "User, AI"
         string content
         string output_type_requested
         datetime created_at
