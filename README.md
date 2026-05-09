@@ -48,11 +48,11 @@ These apply to any service (`qdrant`, `postgres`, `minio`):
 |---|---|
 | Start a service | `docker compose up -d <service>` |
 | Stop a service | `docker compose stop <service>` |
-| Stop + delete container | `docker compose down <service>` |
-| Stop + delete container & data | `docker compose down <service> -v` |
+| Stop + delete container | `docker compose stop <service> && docker compose rm -sf <service>` |
 | View logs | `docker compose logs <service>` |
 | Start all services | `docker compose up -d` |
 | Stop all services | `docker compose down` |
+| Stop all services + delete containers & volumes | `docker compose down -v` |
 
 ## 1) Clone the Project
 
