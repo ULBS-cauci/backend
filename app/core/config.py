@@ -18,8 +18,8 @@ class AppSettings(_Base):
 
 
 class QdrantSettings(_Base):
-    QDRANT_ENDPOINT: str
-    QDRANT_API_KEY: Optional[str] = None
+    VECTOR_DB_ENDPOINT: str
+    VECTOR_DB_API_KEY: Optional[str] = None
 
 
 class OllamaSettings(_Base):
