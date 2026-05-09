@@ -1,7 +1,6 @@
 from typing import Optional
 from datetime import datetime, timezone
 import uuid
-from enum import Enum
 from sqlmodel import SQLModel, Field
 
 # ==========================================
