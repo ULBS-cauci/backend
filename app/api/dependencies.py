@@ -11,7 +11,7 @@ from app.core.config import (
 from app.data_access.clients.qdrant_client import QdrantClient
 from app.data_access.interfaces.vector_db import VectorDBInterface
 
-from app.data_access.interfaces.embedding import EmbeddingClientInterface
+from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.data_access.clients.embedding_client import OllamaEmbeddingClient
 
 from app.data_access.interfaces.llm import LLMInterface
@@ -77,7 +77,7 @@ def get_llm_client(app: AppSettings = Depends(get_app_settings)) -> LLMInterface
 
 def get_embedding_client(
     app: AppSettings = Depends(get_app_settings),
-) -> EmbeddingClientInterface:
+) -> EmbeddingInterface:
     """Yields the configured Embedding client. Typed against the ABC interface."""
     if app.EMBEDDING_CLIENT_TYPE == "ollama":
         return _get_ollama_embedding_client()

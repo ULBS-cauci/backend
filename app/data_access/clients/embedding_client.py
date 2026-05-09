@@ -2,11 +2,11 @@ import asyncio
 from typing import List
 
 import ollama
-from app.data_access.interfaces.embedding import EmbeddingClientInterface
+from app.data_access.interfaces.embedding import EmbeddingInterface
 
-class OllamaEmbeddingClient(EmbeddingClientInterface):
+class OllamaEmbeddingClient(EmbeddingInterface):
     """
-    Concrete implementation of EmbeddingClientInterface using the native ollama Python SDK.
+    Concrete implementation of EmbeddingInterface using the native ollama Python SDK.
     Strictly asynchronous.
     """
     def __init__(self, host: str, model_name: str):
