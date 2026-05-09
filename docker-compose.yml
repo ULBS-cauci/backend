@@ -9,6 +9,7 @@ services:
       - "6333:6333"
     environment:
       # Change this before committing or sharing
+      # Must match VECTOR_DB_SERVICE_API_KEY in .env
       - QDRANT__SERVICE__API_KEY=<set_your_api_key>
     volumes:
       - ./qdrant_data:/qdrant/storage

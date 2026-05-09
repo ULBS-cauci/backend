@@ -7,7 +7,9 @@ from app.schemas.vector_schemas import DocumentChunk, SearchResult
 
 class QdrantClient(VectorDBInterface):
     def __init__(self, endpoint: str, api_key: Optional[str] = None):
-        self.client = AsyncQdrantClient(url=endpoint, api_key=api_key)
+        actual_api_key = api_key if api_key else None
+        
+        self.client = AsyncQdrantClient(url=endpoint, api_key=actual_api_key)
 
     async def create_collection(self, collection_name: str, vector_size: int) -> bool:
         if await self.client.collection_exists(collection_name=collection_name):
@@ -30,16 +32,15 @@ class QdrantClient(VectorDBInterface):
         return True
 
     async def search(self, collection_name: str, query_vector: List[float], limit: int = 5) -> List[SearchResult]:
-        results = await self.client.search(
+        results = await self.client.query_points(
             collection_name=collection_name,
-            query_vector=query_vector,
+            query=query_vector, 
             limit=limit,
             with_payload=True,
-            with_vectors=False,
         )
         
         domain_results = []
-        for point in results:
+        for point in results.points:
             payload = point.payload or {}
             chunk = DocumentChunk(
                 id=str(point.id),

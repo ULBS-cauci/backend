@@ -15,6 +15,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.engine import URL  
 from typing import AsyncGenerator
 
+from app.services.file_service import FileService
+
 
 @lru_cache()
 def get_settings() -> Settings:
@@ -121,3 +123,11 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
+
+
+def get_file_service(
+    vector_db: VectorDBInterface = Depends(get_vector_db_client),
+    embed_client: IEmbeddingClient = Depends(get_embedding_client)
+) -> FileService:
+    """Injects the configured FileService."""
+    return FileService(vector_db, embed_client)
