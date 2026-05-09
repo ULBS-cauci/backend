@@ -65,13 +65,7 @@ app/
 │       └── sessions.py
 ├── data_access/                # Infrastructure / Data Access Layer
 │   ├── clients/                # Concrete adapters to external systems
-│   │   ├── relational_db_client.py # PostgreSQL connection pool
-│   │   ├── llm_client.py       # Text generation wrapper (LLM SDKs)
-│   │   ├── embedding_client.py # Connector to embedding model
-│   │   ├── qdrant_client.py    # Vector DB operations
-│   │   └── object_storage_client.py # S3/local file storage wrapper
 │   └── interfaces/             # Contracts for swappable implementations
-│       └── vector_db.py
 ├── core/                       # App-Wide Configuration & Cross-Cutting Concerns
 │   ├── config.py               # Pydantic BaseSettings for Env vars
 │   ├── exceptions.py           # Custom Error definitions
@@ -91,7 +85,31 @@ app/
     └── ingestion_worker.py     # Heavy lifting: PDF parsing, chunking, and embedding
 ```
 
----
+### 6. Data Access Interface Contracts
+
+All external systems are hidden behind Abstract Base Classes in `data_access/interfaces/`. Services depend only on these contracts — never on concrete clients.
+
+**Exception — PostgreSQL:** The relational database is the sole external system used without a contract interface. SQLModel and asyncpg are used directly, with the async session injected per-request via `Depends()` in `dependencies.py`.
+
+### 7. Core Domain Schemas
+
+Shared data types used across all layers, defined in `schemas/`.
+
+### 8. Configuration System
+
+`core/config.py` uses hierarchical Pydantic `BaseSettings` classes. Each class maps to a specific external system and loads from `.env`.
+
+| Settings class | Provider selector env var | Key fields |
+|---|---|---|
+| `AppSettings` | *(all selectors)* | `VECTOR_DB_CLIENT_TYPE`, `EMBEDDING_CLIENT_TYPE`, `LLM_CLIENT_TYPE`, `OBJECT_STORAGE_CLIENT_TYPE` |
+| `QdrantSettings` | `VECTOR_DB_CLIENT_TYPE=qdrant` | `VECTOR_DB_ENDPOINT` (required), `VECTOR_DB_API_KEY` (optional) |
+| `OllamaSettings` | `EMBEDDING_CLIENT_TYPE=ollama` | `OLLAMA_HOST`, `OLLAMA_EMBED_MODEL` |
+| `OpenAISettings` | `LLM_CLIENT_TYPE=openai` | `OPENAI_API_KEY`, `OPENAI_LLM_MODEL` (default: `gpt-4o-mini`), `OPENAI_TEMPERATURE` (default: `0.2`) |
+| `MinIOSettings` | `OBJECT_STORAGE_CLIENT_TYPE=minio` | `MINIO_ENDPOINT`, `MINIO_USER`, `MINIO_PASSWORD`, `MINIO_USE_SSL` (default: `false`) |
+| `PostgresSettings` | *(always active)* | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_HOST`, `POSTGRES_PORT` |
+
+All selector defaults: `VECTOR_DB_CLIENT_TYPE=qdrant`, `EMBEDDING_CLIENT_TYPE=ollama`, `LLM_CLIENT_TYPE=openai`, `OBJECT_STORAGE_CLIENT_TYPE=minio`.
+
 
 ## II. Developer Rules & Standards
 
