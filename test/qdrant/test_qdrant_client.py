@@ -49,7 +49,7 @@ def fail(label: str, err: Exception) -> None:
 async def run() -> None:
     client: VectorDBInterface = get_vector_db_client(get_app_settings())
     settings = QdrantSettings()
-    print(f"\nTarget     : {settings.VECTOR_DB_ENDPOINT}")
+    print(f"\nTarget     : {settings.QDRANT_ENDPOINT}")
     print(f"Collection : {COLLECTION}\n")
 
     # ── create_collection ─────────────────────────────────────────────────────

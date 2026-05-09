@@ -131,11 +131,11 @@ Qdrant stores and searches document chunk embeddings. It runs as a Docker contai
 
 ```env
 VECTOR_DB_CLIENT_TYPE=qdrant
-VECTOR_DB_ENDPOINT=http://localhost:6333
-# VECTOR_DB_API_KEY=your_key   # optional — only if you enable authentication
+QDRANT_ENDPOINT=http://localhost:6333
+# QDRANT_API_KEY=your_key   # optional — only if you enable authentication
 ```
 
-> **API key (optional for local dev):** By default the compose file runs Qdrant without authentication. To enable it, uncomment the `QDRANT__SERVICE__API_KEY` block in `docker-compose.yml` and add `VECTOR_DB_API_KEY=your_key` to your `.env`.
+> **API key (optional for local dev):** By default the compose file runs Qdrant without authentication. To enable it, uncomment the `QDRANT__SERVICE__API_KEY` block in `docker-compose.yml` and add `QDRANT_API_KEY=your_key` to your `.env`.
 
 ### Step 1 — Start the container
 

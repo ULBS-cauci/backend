@@ -99,18 +99,6 @@ Shared data types used across all layers, defined in `schemas/`.
 
 `core/config.py` uses hierarchical Pydantic `BaseSettings` classes. Each class maps to a specific external system and loads from `.env`.
 
-| Settings class | Provider selector env var | Key fields |
-|---|---|---|
-| `AppSettings` | *(all selectors)* | `VECTOR_DB_CLIENT_TYPE`, `EMBEDDING_CLIENT_TYPE`, `LLM_CLIENT_TYPE`, `OBJECT_STORAGE_CLIENT_TYPE` |
-| `QdrantSettings` | `VECTOR_DB_CLIENT_TYPE=qdrant` | `VECTOR_DB_ENDPOINT` (required), `VECTOR_DB_API_KEY` (optional) |
-| `OllamaSettings` | `EMBEDDING_CLIENT_TYPE=ollama` | `OLLAMA_HOST`, `OLLAMA_EMBED_MODEL` |
-| `OpenAISettings` | `LLM_CLIENT_TYPE=openai` | `OPENAI_API_KEY`, `OPENAI_LLM_MODEL` (default: `gpt-4o-mini`), `OPENAI_TEMPERATURE` (default: `0.2`) |
-| `MinIOSettings` | `OBJECT_STORAGE_CLIENT_TYPE=minio` | `MINIO_ENDPOINT`, `MINIO_USER`, `MINIO_PASSWORD`, `MINIO_USE_SSL` (default: `false`) |
-| `PostgresSettings` | *(always active)* | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_HOST`, `POSTGRES_PORT` |
-
-All selector defaults: `VECTOR_DB_CLIENT_TYPE=qdrant`, `EMBEDDING_CLIENT_TYPE=ollama`, `LLM_CLIENT_TYPE=openai`, `OBJECT_STORAGE_CLIENT_TYPE=minio`.
-
-
 ## II. Developer Rules & Standards
 
 ### 1. 100% Asynchronous I/O Execution
