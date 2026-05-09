@@ -6,6 +6,7 @@ from sqlmodel import SQLModel, Field
 
 class MessageRole(str, Enum): 
     USER = "User"
+    SYSTEM = "System"
     AI = "AI"
 
 # ==========================================
