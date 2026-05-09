@@ -2,7 +2,7 @@ import asyncio
 from typing import List
 
 import ollama
-from app.data_access.interfaces.embedding import IEmbeddingClient
+from data_access.interfaces.embedding import IEmbeddingClient
 
 class OllamaEmbeddingClient(IEmbeddingClient):
     """

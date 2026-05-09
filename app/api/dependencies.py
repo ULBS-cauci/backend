@@ -1,14 +1,14 @@
 from functools import lru_cache
 from fastapi import Depends
-from app.core.config import Settings
-from app.data_access.clients.qdrant_client import QdrantClient
-from app.data_access.interfaces.vector_db import VectorDBInterface
+from core.config import Settings
+from data_access.clients.qdrant_client import QdrantClient
+from data_access.interfaces.vector_db import VectorDBInterface
 
-from app.data_access.interfaces.embedding import IEmbeddingClient
-from app.data_access.clients.embedding_client import OllamaEmbeddingClient
+from data_access.interfaces.embedding import IEmbeddingClient
+from data_access.clients.embedding_client import OllamaEmbeddingClient
 
-from app.data_access.interfaces.llm import LLMInterface
-from app.data_access.clients.openai_client import OpenAILLMClient
+from data_access.interfaces.llm import LLMInterface
+from data_access.clients.openai_client import OpenAILLMClient
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlmodel.ext.asyncio.session import AsyncSession
