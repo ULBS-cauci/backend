@@ -37,7 +37,7 @@ def _get_qdrant_client() -> QdrantClient:
     """Caches the Qdrant connection pool per application lifecycle."""
     settings = QdrantSettings()
     return QdrantClient(
-        endpoint=settings.VECTOR_DB_ENDPOINT, api_key=settings.VECTOR_DB_API_KEY
+        endpoint=settings.QDRANT_ENDPOINT, api_key=settings.QDRANT_API_KEY
     )
 
 

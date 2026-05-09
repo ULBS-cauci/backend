@@ -7,14 +7,10 @@ Run from the backend/ directory so that .env is found automatically:
 """
 
 import asyncio
-import os
 import sys
+from pathlib import Path
 
-from dotenv import load_dotenv  # needed so pydantic-settings finds .env at the right path
-
-_backend = os.path.join(os.path.dirname(__file__), "..", "..")
-load_dotenv(dotenv_path=os.path.join(_backend, ".env"))
-sys.path.insert(0, os.path.abspath(_backend))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from app.api.dependencies import get_object_storage_client, get_app_settings, get_minio_settings
 from app.data_access.interfaces.object_storage import ObjectStorageInterface
