@@ -19,6 +19,6 @@ async def ask(
     async def event_stream():
         async for chunk in service.ask_stream(payload.query):
             yield f"data: {json.dumps(chunk)}\n\n"
-        yield "data: [DONE]\n\n"
+        yield f"data: {json.dumps('[DONE]')}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
