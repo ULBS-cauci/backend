@@ -7,9 +7,7 @@ from app.schemas.vector_schemas import DocumentChunk, SearchResult
 
 class QdrantClient(VectorDBInterface):
     def __init__(self, endpoint: str, api_key: Optional[str] = None):
-        actual_api_key = api_key if api_key else None
-        
-        self.client = AsyncQdrantClient(url=endpoint, api_key=actual_api_key)
+        self.client = AsyncQdrantClient(url=endpoint, api_key=api_key)
 
     async def create_collection(self, collection_name: str, vector_size: int) -> bool:
         if await self.client.collection_exists(collection_name=collection_name):

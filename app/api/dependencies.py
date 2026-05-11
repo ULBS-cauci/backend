@@ -16,6 +16,9 @@ from sqlalchemy.engine import URL
 from typing import AsyncGenerator
 
 from app.services.file_service import FileService
+from app.services.chat_service import ChatService
+
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 @lru_cache()
@@ -126,8 +129,15 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 def get_file_service(
-    vector_db: VectorDBInterface = Depends(get_vector_db_client),
-    embed_client: IEmbeddingClient = Depends(get_embedding_client)
+    vector_db = Depends(get_vector_db_client),
+    embed_client = Depends(get_embedding_client)
 ) -> FileService:
-    """Injects the configured FileService."""
-    return FileService(vector_db, embed_client)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+    return FileService(vector_db, embed_client, splitter)
+
+def get_chat_service(
+    vector_db = Depends(get_vector_db_client),
+    embedding_client = Depends(get_embedding_client),
+    llm_client = Depends(get_llm_client)
+) -> ChatService:
+    return ChatService(vector_db, embedding_client, llm_client)    

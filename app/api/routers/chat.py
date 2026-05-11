@@ -1,8 +1,11 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.api.dependencies import get_vector_db_client, get_embedding_client, get_llm_client
 from app.services.chat_service import ChatService
+from app.api.dependencies import get_chat_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -13,14 +16,14 @@ class ChatRequest(BaseModel):
 @router.post("/query")
 async def ask_question(
     request: ChatRequest,
-    vector_db = Depends(get_vector_db_client),
-    embedding_client = Depends(get_embedding_client),
-    llm_client = Depends(get_llm_client)  
+    chat_service: ChatService = Depends(get_chat_service)
 ):
-    service = ChatService(vector_db, embedding_client, llm_client)
-    
     try:
-        answer = await service.answer_question(request.message, request.collection_name)
+        answer = await chat_service.answer_question(request.message, request.collection_name)
         return {"answer": answer}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Internal error in ask_question: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500, 
+            detail="An unexpected error occurred while processing your request. Please try again later."
+        )
