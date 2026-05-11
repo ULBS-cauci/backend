@@ -21,9 +21,7 @@ class FileEntity(FileEntityBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     uploaded_by: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id")
     object_storage_key: Optional[str] = Field(default=None, max_length=2048)
-    created_at: Optional[datetime] = Field(default=None, 
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # ---------------------------------------------------------
 # 3. THE INPUT DTOs

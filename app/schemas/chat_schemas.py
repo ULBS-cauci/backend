@@ -22,12 +22,8 @@ class ChatSessionBase(SQLModel):
 class ChatSession(ChatSessionBase, table=True):
     __tablename__ = "conversations"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    created_at: Optional[datetime] = Field(default=None, 
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    )
-    updated_at: Optional[datetime] = Field(default=None, 
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class ChatSessionCreate(ChatSessionBase):
     pass
@@ -73,9 +69,7 @@ class Attachment(AttachmentBase, table=True):
     __tablename__ = "attachments"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     object_storage_key: str = Field(max_length=2048) # Replaces file_url
-    created_at: Optional[datetime] = Field(default=None, 
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class AttachmentPublic(AttachmentBase):
     id: uuid.UUID
@@ -93,9 +87,7 @@ class SharedLinkBase(SQLModel): #
 class SharedLink(SharedLinkBase, table=True):
     __tablename__ = "shared_links"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    created_at: Optional[datetime] = Field(default=None, 
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class SharedLinkPublic(SharedLinkBase):
     id: uuid.UUID

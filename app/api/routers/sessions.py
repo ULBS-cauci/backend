@@ -7,14 +7,14 @@ from fastapi.responses import StreamingResponse
 
 from app.api.dependencies import get_chat_service, get_current_user
 from app.schemas.chat_schemas import MessageCreate, ChatSessionPublic, MessagePublic
-from app.schemas.user_schemas import User, UserPublic
+from app.schemas.user_schemas import User
 from app.services.chat_service import ChatService
 
 router = APIRouter()
 
 @router.get("/", response_model=List[ChatSessionPublic])
 async def list_sessions(
-    current_user: UserPublic = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ):
     sessions = await service.get_user_sessions(user_id=current_user.id)
@@ -23,12 +23,12 @@ async def list_sessions(
 @router.get("/{conversation_id}/messages", response_model=List[MessagePublic])
 async def list_session_messages(
     conversation_id: uuid.UUID,
-    current_user: UserPublic = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ):
-    sessions = await service.get_user_sessions(user_id=current_user.id)
-    if not any(session.id == conversation_id for session in sessions):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this conversation")
+    session = await service.get_session_for_user(conversation_id=conversation_id, user_id=current_user.id)
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
     
     messages = await service.get_session_messages(conversation_id=conversation_id)
     return messages
@@ -36,7 +36,7 @@ async def list_session_messages(
 @router.post("/ask")
 async def ask(
     payload: MessageCreate,
-    current_user: UserPublic = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ):
     async def event_stream():

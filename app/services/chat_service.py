@@ -24,6 +24,12 @@ class ChatService:
         result = await self._db.exec(stmt)
         return list(result.all())
 
+    async def get_session_for_user(self, conversation_id: uuid.UUID, user_id: uuid.UUID) -> Optional[ChatSession]:
+        session = await self._db.get(ChatSession, conversation_id)
+        if session and session.user_id == user_id:
+            return session
+        return None
+
     async def get_session_messages(self, conversation_id: uuid.UUID) -> List[Message]:
         stmt = select(Message).where(Message.conversation_id == conversation_id).order_by(asc(Message.created_at))
         result = await self._db.exec(stmt)
@@ -39,12 +45,14 @@ class ChatService:
             await self._db.refresh(session)
             conversation_id = session.id
         else:
-            session = await self._db.get(ChatSession, conversation_id)
-            if session and session.user_id == user_id:
-                # Update timestamp
-                session.updated_at = datetime.datetime.now(datetime.timezone.utc)
-                self._db.add(session)
-                await self._db.flush()
+            session = await self.get_session_for_user(conversation_id, user_id)
+            if not session:
+                raise ValueError("Conversation not found or unauthorized")
+            
+            # Update timestamp
+            session.updated_at = datetime.datetime.now(datetime.timezone.utc)
+            self._db.add(session)
+            await self._db.flush()
 
         # 2. Extract history and build context
         history = await self.get_session_messages(conversation_id)
@@ -69,10 +77,11 @@ class ChatService:
         await self._db.commit()
 
         # 3. Stream from LLM
-        full_answer = ""
+        chunks = []
         async for chunk in self._llm.stream(messages):
-            full_answer += chunk
+            chunks.append(chunk)
             yield chunk
+        full_answer = "".join(chunks)
 
         # 4. Save AI final response
         ai_message = Message(

@@ -1,12 +1,7 @@
-from datetime import datetime
 from functools import lru_cache
-from time import timezone
-from fastapi import Depends
+from fastapi import Depends, HTTPException, status
 import uuid
-from sqlmodel import select
 
-
-from app.schemas.user_schemas import User, UserPublic
 from app.schemas.user_schemas import User, UserRole
 from app.data_access.clients.qdrant_client import QdrantClient
 from app.data_access.interfaces.vector_db import VectorDBInterface
@@ -148,7 +143,16 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
             await session.rollback()
             raise
 
-async def get_current_user(db: AsyncSession = Depends(get_db_session)) -> User:
+async def get_current_user(
+    db: AsyncSession = Depends(get_db_session),
+    settings: AppSettings = Depends(get_app_settings)
+) -> User:
+    if settings.ENVIRONMENT != "dev":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication is currently only supported in dev environment",
+        )
+
     dummy_id = uuid.UUID('00000000-0000-0000-0000-000000000001')
     user = await db.get(User, dummy_id)
     if not user:

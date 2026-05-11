@@ -15,9 +15,7 @@ class SystemPrompt(SystemPromptBase, table=True):
     __tablename__ = "system_prompts"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     author_id: uuid.UUID = Field(foreign_key="users.id")
-    created_at: Optional[datetime] = Field(default=None, 
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class SystemPromptPublic(SystemPromptBase):
     id: uuid.UUID
@@ -36,9 +34,7 @@ class LlmTipBase(SQLModel):
 class LlmTip(LlmTipBase, table=True):
     __tablename__ = "llm_tips"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    created_at: Optional[datetime] = Field(default=None, 
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class LlmTipPublic(LlmTipBase):
     id: uuid.UUID
