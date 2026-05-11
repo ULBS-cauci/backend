@@ -33,6 +33,7 @@ def get_app_settings() -> AppSettings:
     return AppSettings()
 
 
+# Vector Database Dependency
 @lru_cache()
 def _get_qdrant_client() -> QdrantClient:
     """Caches the Qdrant connection pool per application lifecycle."""
@@ -51,15 +52,7 @@ def get_vector_db_client(
     raise ValueError(f"Unsupported Vector Database type: {app.VECTOR_DB_CLIENT_TYPE}")
 
 
-@lru_cache()
-def _get_ollama_embedding_client() -> OllamaEmbeddingClient:
-    """Caches the Ollama embedding client per application lifecycle."""
-    settings = OllamaSettings()
-    return OllamaEmbeddingClient(
-        host=settings.OLLAMA_HOST, model_name=settings.OLLAMA_EMBED_MODEL
-    )
-
-
+# LLM Dependency
 @lru_cache()
 def _get_openai_llm_client() -> OpenAILLMClient:
     """Caches the OpenAI client per application lifecycle."""
@@ -82,6 +75,16 @@ def get_chat_service(llm: LLMInterface = Depends(get_llm_client)) -> ChatService
     return ChatService(llm=llm)
 
 
+# Embedding Client Dependency
+@lru_cache()
+def _get_ollama_embedding_client() -> OllamaEmbeddingClient:
+    """Caches the Ollama embedding client per application lifecycle."""
+    settings = OllamaSettings()
+    return OllamaEmbeddingClient(
+        host=settings.OLLAMA_HOST, model_name=settings.OLLAMA_EMBED_MODEL
+    )
+
+
 def get_embedding_client(
     app: AppSettings = Depends(get_app_settings),
 ) -> EmbeddingInterface:
@@ -91,6 +94,7 @@ def get_embedding_client(
     raise ValueError(f"Unsupported Embedding Client type: {app.EMBEDDING_CLIENT_TYPE}")
 
 
+# Object Storage Dependency
 @lru_cache()
 def _get_minio_client() -> MinIOClient:
     """Caches the MinIO session per application lifecycle."""
@@ -114,6 +118,7 @@ def get_object_storage_client(
     )
 
 
+# Database Session Dependency
 @lru_cache()
 def _get_async_engine() -> AsyncEngine:
     """Caches the SQLAlchemy/SQLModel AsyncEngine. Created once per application lifecycle."""

@@ -25,7 +25,7 @@ class QdrantSettings(_Base):
 
 
 class OllamaSettings(_Base):
-    OLLAMA_HOST: str = "http://localhost:11434"
+    OLLAMA_HOST: str
     OLLAMA_EMBED_MODEL: str
 
 
@@ -46,5 +46,5 @@ class PostgresSettings(_Base):
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
-    POSTGRES_HOST: str = "localhost"
-    POSTGRES_PORT: int = 5432
+    POSTGRES_HOST: str
+    POSTGRES_PORT: int
