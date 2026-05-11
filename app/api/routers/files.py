@@ -1,12 +1,9 @@
 import logging
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
-from sqlmodel.ext.asyncio.session import AsyncSession
-
-from app.api.dependencies import get_db_session, get_file_service
+from app.api.dependencies import get_file_service
 from app.services.file_service import FileService
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
 
 @router.post("/upload")
@@ -19,10 +16,11 @@ async def upload_textbook(
         
         return {
             "status": "success",
-            "message": f"Document {file.filename} uploaded and indexed."
+            "message": f"Document {file.filename} uploaded and indexed.",
+            "collection": collection  
         }
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
-        logger.error(f"Error: {str(e)}", exc_info=True)
+        logger.error(f"Error during upload: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal Server Error")
