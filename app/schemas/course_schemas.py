@@ -18,10 +18,10 @@ class Course(CourseBase, table=True):
     __tablename__ = "courses"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     held_by: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id")
-    created_at: datetime = Field(
+    created_at: Optional[datetime] = Field(default=None, 
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
-    updated_at: datetime = Field(
+    updated_at: Optional[datetime] = Field(default=None, 
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     )
 

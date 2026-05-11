@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List
 from typing import AsyncIterator
-from schemas.llm_schemas import ChatMessage
+from app.schemas.llm_schemas import ChatMessage
 
 
 class LLMInterface(ABC):
@@ -20,7 +20,7 @@ class LLMInterface(ABC):
         pass
 
     @abstractmethod
-    async def stream(self, messages: List[ChatMessage]) -> AsyncIterator[str]:
+    def stream(self, messages: List[ChatMessage]) -> AsyncIterator[str]:
         """
         Stream a response based on the provided chat messages.
 

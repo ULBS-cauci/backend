@@ -1,5 +1,13 @@
+from datetime import datetime
 from functools import lru_cache
+from time import timezone
 from fastapi import Depends
+import uuid
+from sqlmodel import select
+
+
+from app.schemas.user_schemas import User, UserPublic
+from app.schemas.user_schemas import User, UserRole
 from app.data_access.clients.qdrant_client import QdrantClient
 from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.core.config import (
@@ -14,8 +22,8 @@ from app.core.config import (
 from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.data_access.clients.embedding_client import OllamaEmbeddingClient
 
-from data_access.interfaces.llm import LLMInterface
-from data_access.clients.openai_client import OpenAILLMClient
+from app.data_access.interfaces.llm import LLMInterface
+from app.data_access.clients.openai_client import OpenAILLMClient
 
 from app.services.chat_service import ChatService
 from app.data_access.interfaces.object_storage import ObjectStorageInterface
@@ -78,8 +86,6 @@ def get_llm_client(app: AppSettings = Depends(get_app_settings)) -> LLMInterface
     raise ValueError(f"Unsupported LLM Client type: {app.LLM_CLIENT_TYPE}")
 
 
-def get_chat_service(llm: LLMInterface = Depends(get_llm_client)) -> ChatService:
-    return ChatService(llm=llm)
 
 
 def get_embedding_client(
@@ -141,3 +147,23 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
+
+async def get_current_user(db: AsyncSession = Depends(get_db_session)) -> User:
+    dummy_id = uuid.UUID('00000000-0000-0000-0000-000000000001')
+    user = await db.get(User, dummy_id)
+    if not user:
+        user = User(
+            id=dummy_id, 
+            email="dummy@student.com", 
+            first_name="Dummy", 
+            last_name="Student",
+            hashed_password="dummy_password",
+            role=UserRole.STUDENT
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+    return user
+
+def get_chat_service(llm: LLMInterface = Depends(get_llm_client), db: AsyncSession = Depends(get_db_session)) -> ChatService:
+    return ChatService(llm=llm, db=db)

@@ -22,10 +22,10 @@ class ChatSessionBase(SQLModel):
 class ChatSession(ChatSessionBase, table=True):
     __tablename__ = "conversations"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    created_at: datetime = Field(
+    created_at: Optional[datetime] = Field(default=None, 
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
-    updated_at: datetime = Field(
+    updated_at: Optional[datetime] = Field(default=None, 
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     )
 
@@ -49,13 +49,18 @@ class MessageBase(SQLModel):
 class Message(MessageBase, table=True):
     __tablename__ = "messages"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    created_at: datetime = Field(
+    created_at: Optional[datetime] = Field(default=None, 
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
 
 class MessagePublic(MessageBase):
     id: uuid.UUID
     created_at: datetime
+
+class MessageCreate(SQLModel):
+    conversation_id: Optional[uuid.UUID] = None
+    content: str
+    output_type_requested: Optional[str] = Field(default=None, max_length=100)
 
 # ==========================================
 # ATTACHMENT
@@ -68,7 +73,7 @@ class Attachment(AttachmentBase, table=True):
     __tablename__ = "attachments"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     object_storage_key: str = Field(max_length=2048) # Replaces file_url
-    created_at: datetime = Field(
+    created_at: Optional[datetime] = Field(default=None, 
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
 
@@ -88,7 +93,7 @@ class SharedLinkBase(SQLModel): #
 class SharedLink(SharedLinkBase, table=True):
     __tablename__ = "shared_links"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    created_at: datetime = Field(
+    created_at: Optional[datetime] = Field(default=None, 
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )
 
@@ -96,9 +101,4 @@ class SharedLinkPublic(SharedLinkBase):
     id: uuid.UUID
     created_at: datetime
 
-class AskRequest(BaseModel):
-    query: str = Field(
-        ...,
-        min_length=5,
-        description="The student's question to be answered by the LLM.",
-    )
+
