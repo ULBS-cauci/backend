@@ -1,10 +1,11 @@
+import uuid
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from sqlmodel import SQLModel, Field
 from datetime import datetime
 
 class DocumentChunk(BaseModel):
-    id: str
+    id: uuid.UUID
     text: str
     metadata: Dict[str, Any]
 
