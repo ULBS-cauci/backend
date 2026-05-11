@@ -1,3 +1,4 @@
+import uuid
 from typing import List
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Optional, PointStruct, VectorParams, Distance
@@ -36,17 +37,17 @@ class QdrantClient(VectorDBInterface):
             limit=limit,
             with_payload=True,
         )
-        
+
         domain_results = []
         for point in results.points:
             payload = point.payload or {}
             chunk = DocumentChunk(
-                id=str(point.id),
+                id=uuid.UUID(str(point.id)),
                 text=payload.get("text", ""),
                 metadata=payload.get("metadata", {})
             )
             domain_results.append(SearchResult(chunk=chunk, score=point.score))
-            
+
         return domain_results
 
     async def upsert_chunks(self, collection_name: str, chunks: List[DocumentChunk], vectors: List[List[float]]) -> bool:

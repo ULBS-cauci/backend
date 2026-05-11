@@ -19,7 +19,7 @@ texts = [
 embeddings = model.encode(texts, normalize_embeddings=True)
 
 print(f"Dimensiune vector: {embeddings.shape[1]}\n")
-for text,emb in zip(texts,embeddings):
+for text, emb in zip(texts, embeddings):
     print(f"Text : {text}")
     print(f"Primele valori din embedding: {emb[:10]}\n")
 
