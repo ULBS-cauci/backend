@@ -20,7 +20,7 @@ erDiagram
         UUID id PK
         string title
         string description
-        UUID created_by FK "Ref: users.id"
+        UUID held_by FK "Ref: users.id"
         datetime created_at
         datetime updated_at
     }
@@ -50,7 +50,7 @@ erDiagram
     messages {
         UUID id PK
         UUID conversation_id FK "Ref: conversations.id"
-        string role "User, AI"
+        string sender "User, System, AI"
         string content
         string output_type_requested
         datetime created_at
@@ -76,10 +76,8 @@ erDiagram
     system_prompts {
         UUID id PK
         UUID author_id FK "Ref: users.id"
-        UUID course_id FK "Ref: courses.id"
         string title
         string content
-        boolean is_active
         datetime created_at
     }
 
@@ -100,7 +98,6 @@ erDiagram
     courses ||--o{ materials : "contains"
     materials }o--|| users : "uploaded_by"
     
-    courses ||--o{ system_prompts : "guided_by"
     system_prompts }o--|| users : "authored_by"
 
     %% Chat System Sub-graph
@@ -131,7 +128,7 @@ classDiagram
 
     class Course {
         +UUID id
-        +UUID created_by
+        +UUID held_by
         +String title
         +String description
         +DateTime created_at
@@ -161,7 +158,7 @@ classDiagram
     class Message {
         +UUID id
         +UUID conversation_id
-        +String role
+        +String sender
         +String content
         +String output_type_requested
         +DateTime created_at
@@ -186,10 +183,8 @@ classDiagram
     class SystemPrompt {
         +UUID id
         +UUID author_id
-        +UUID course_id
         +String title
         +String content
-        +Boolean is_active
         +DateTime created_at
     }
 
@@ -211,8 +206,7 @@ classDiagram
     Course "1" *-- "*" Material : contains
     Course "1" *-- "*" SystemPrompt : configures
     Course "1" <-- "*" Conversation : references
-    
-    Conversation "1" *-- "*" Message : owns
+    n "1" *-- "*" Message : owns
     Conversation "1" *-- "0..1" SharedLink : generates
     
     Message "1" *-- "*" Attachment : includes
@@ -245,7 +239,7 @@ classDiagram
         title: "Introduction to AI"
         created_by: 7f1a3b10...
     }
-
+hel
     class lecture_slides {
         <<Material>>
         id: 9d123bca...
@@ -266,7 +260,7 @@ classDiagram
         <<Message>>
         id: 28bc9910...
         conversation_id: 11eeb229...
-        role: "User"
+        sender: "User"
         content: "Can you explain backpropagation?"
     }
 

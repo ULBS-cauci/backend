@@ -40,6 +40,6 @@ class CourseUpdate(SQLModel):
 # ---------------------------------------------------------
 class CoursePublic(CourseBase):
     id: uuid.UUID
-    created_by: Optional[uuid.UUID]
+    held_by: Optional[uuid.UUID]
     created_at: datetime
     updated_at: datetime
