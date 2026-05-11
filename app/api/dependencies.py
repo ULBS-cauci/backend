@@ -27,8 +27,6 @@ from sqlalchemy.engine import URL
 from typing import AsyncGenerator
 
 from app.services.file_service import FileService
-from app.services.chat_service import ChatService
-
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 

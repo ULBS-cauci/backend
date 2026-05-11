@@ -1,6 +1,6 @@
 import uuid
 from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 from sqlmodel import SQLModel, Field
 from datetime import datetime
 
