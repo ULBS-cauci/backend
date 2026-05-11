@@ -13,17 +13,24 @@ router = APIRouter()
 @router.post("/upload")
 async def upload_textbook(
     file: UploadFile = File(...),
-    file_service: FileService = Depends(get_file_service) 
+    file_service: FileService = Depends(get_file_service),
+    db: AsyncSession = Depends(get_db_session)
 ):
+    """
+    Upload a PDF, vectorize it in Qdrant, and save metadata in Postgres.
+    """
     try:
-        collection = await file_service.upload_and_index(file)
+        collection = await file_service.upload_and_index(file, db)
         
         return {
             "status": "success",
-            "message": f"Documentul {file.filename} a fost indexat."
+            "message": f"The document {file.filename} has been indexed in {collection}."
         }
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
-        logger.error(f"Eroare: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        logger.error(f"Error processing file {file.filename}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500, 
+            detail="An unexpected error occurred while processing the file. Please try again."
+        )
