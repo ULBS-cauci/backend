@@ -3,8 +3,9 @@ from datetime import datetime, timezone
 import uuid
 from enum import Enum
 from sqlmodel import SQLModel, Field
+from sqlalchemy import Column, DateTime, func
 
-class MessageRole(str, Enum): 
+class MessageSender(str, Enum): 
     USER = "User"
     SYSTEM = "System"
     AI = "AI"
@@ -20,8 +21,12 @@ class ChatSessionBase(SQLModel):
 class ChatSession(ChatSessionBase, table=True):
     __tablename__ = "conversations"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
+    updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    )
 
 class ChatSessionCreate(ChatSessionBase):
     pass
@@ -36,14 +41,16 @@ class ChatSessionPublic(ChatSessionBase):
 # ==========================================
 class MessageBase(SQLModel):
     conversation_id: uuid.UUID = Field(foreign_key="conversations.id")
-    role: MessageRole
+    sender: MessageSender
     content: str
     output_type_requested: Optional[str] = Field(default=None, max_length=100)
 
 class Message(MessageBase, table=True):
     __tablename__ = "messages"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
 
 class MessagePublic(MessageBase):
     id: uuid.UUID
@@ -60,7 +67,9 @@ class Attachment(AttachmentBase, table=True):
     __tablename__ = "attachments"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     object_storage_key: str = Field(max_length=2048) # Replaces file_url
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
 
 class AttachmentPublic(AttachmentBase):
     id: uuid.UUID
@@ -78,7 +87,9 @@ class SharedLinkBase(SQLModel): #
 class SharedLink(SharedLinkBase, table=True):
     __tablename__ = "shared_links"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
 
 class SharedLinkPublic(SharedLinkBase):
     id: uuid.UUID

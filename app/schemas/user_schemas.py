@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import uuid
 from enum import Enum
 from sqlmodel import SQLModel, Field
+from sqlalchemy import Column, DateTime, func
 
 class UserRole(str, Enum):
     STUDENT = "Student"
@@ -25,8 +26,12 @@ class User(UserBase, table=True):
     __tablename__ = "users"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     hashed_password: str
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
+    updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    )
 
 # ---------------------------------------------------------
 # 3. THE INPUT DTOs (What the user is allowed to send)

@@ -1,7 +1,10 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+import logging
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import SQLModel
+
+logger = logging.getLogger("uvicorn.error")
 
 # Important: We must import all SQLModel schemas here so that SQLModel.metadata is fully populated 
 # before we try to create the tables natively.
@@ -20,13 +23,14 @@ async def lifespan(app: FastAPI):
     Code before 'yield' runs on application startup.
     Code after 'yield' runs on application shutdown.
     """
+    logger.info("Starting up AI Tutor API...") 
     engine = _get_async_engine()
     
-    print("Initializing database tables...")
+    logger.info("Initializing database tables...")
     async with engine.begin() as conn:
         # run_sync is required because create_all is a synchronous SQLAlchemy function
         await conn.run_sync(SQLModel.metadata.create_all)
-    print("Database tables initialized successfully.")
+    logger.info("Database tables initialized successfully.")
     
     yield
     

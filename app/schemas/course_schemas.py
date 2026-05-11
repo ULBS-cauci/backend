@@ -2,6 +2,7 @@ from typing import Optional
 from datetime import datetime, timezone
 import uuid
 from sqlmodel import SQLModel, Field
+from sqlalchemy import Column, DateTime, func
 
 # ---------------------------------------------------------
 # 1. THE BASE (Shared fields)
@@ -16,9 +17,13 @@ class CourseBase(SQLModel):
 class Course(CourseBase, table=True):
     __tablename__ = "courses"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    created_by: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    held_by: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id")
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
+    updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    )
 
 # ---------------------------------------------------------
 # 3. THE INPUT DTOs
