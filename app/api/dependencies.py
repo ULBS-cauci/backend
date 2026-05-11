@@ -12,7 +12,7 @@ from app.data_access.clients.openai_client import OpenAILLMClient
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlalchemy.engine import URL  
+from sqlalchemy.engine import URL
 from typing import AsyncGenerator
 
 
@@ -61,6 +61,9 @@ def _get_openai_client() -> OpenAILLMClient:
     )
 
 
+from app.services.chat_service import ChatService
+
+
 def get_llm_client(settings: Settings = Depends(get_settings)) -> LLMInterface:
     """
     Yields the configured LLM client according to environment settings.
@@ -70,6 +73,10 @@ def get_llm_client(settings: Settings = Depends(get_settings)) -> LLMInterface:
         return _get_openai_client()
     else:
         raise ValueError(f"Unsupported LLM Client type: {settings.LLM_CLIENT_TYPE}")
+
+
+def get_chat_service(llm: LLMInterface = Depends(get_llm_client)) -> ChatService:
+    return ChatService(llm=llm)
 
 
 def get_embedding_client(
@@ -86,6 +93,7 @@ def get_embedding_client(
             f"Unsupported Embedding Client type: {settings.EMBEDDING_CLIENT_TYPE}"
         )
 
+
 @lru_cache()
 def _get_async_engine() -> AsyncEngine:
     """
@@ -93,21 +101,23 @@ def _get_async_engine() -> AsyncEngine:
     The engine manages the connection pool to PostgreSQL and should only be created once.
     """
     settings = get_settings()
-    
+
     database_url = URL.create(
         drivername="postgresql+asyncpg",
         username=settings.POSTGRES_USER,
         password=settings.POSTGRES_PASSWORD,
         host=settings.POSTGRES_HOST,
         port=settings.POSTGRES_PORT,
-        database=settings.POSTGRES_DB
+        database=settings.POSTGRES_DB,
     )
-    
+
     # pool_size can be tuned based on expected load and database capacity
     # If you encounter connection issues under load, consider increasing pool_size and max_overflow, but be mindful of the database's max connections limit.
-    return create_async_engine(database_url, echo=False, pool_pre_ping=True, pool_size=5, max_overflow=50)
+    return create_async_engine(
+        database_url, echo=False, pool_pre_ping=True, pool_size=5, max_overflow=50
+    )
 
-    
+
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """
     Generates a fresh database session for each incoming request.
