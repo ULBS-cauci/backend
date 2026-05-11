@@ -1,8 +1,8 @@
 from openai import AsyncOpenAI
 from typing import List, AsyncIterator
 
-from app.data_access.interfaces.llm import LLMInterface
-from app.schemas.llm_schemas import ChatMessage
+from data_access.interfaces.llm import LLMInterface
+from schemas.llm_schemas import ChatMessage
 
 
 class OpenAILLMClient(LLMInterface):

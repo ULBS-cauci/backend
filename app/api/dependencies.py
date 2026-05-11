@@ -1,5 +1,7 @@
 from functools import lru_cache
 from fastapi import Depends
+from app.data_access.clients.qdrant_client import QdrantClient
+from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.core.config import (
     AppSettings,
     QdrantSettings,
@@ -8,14 +10,12 @@ from app.core.config import (
     MinIOSettings,
     PostgresSettings,
 )
-from app.data_access.clients.qdrant_client import QdrantClient
-from app.data_access.interfaces.vector_db import VectorDBInterface
 
 from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.data_access.clients.embedding_client import OllamaEmbeddingClient
 
-from app.data_access.interfaces.llm import LLMInterface
-from app.data_access.clients.openai_client import OpenAILLMClient
+from data_access.interfaces.llm import LLMInterface
+from data_access.clients.openai_client import OpenAILLMClient
 
 from app.services.chat_service import ChatService
 from app.data_access.interfaces.object_storage import ObjectStorageInterface
@@ -97,14 +97,9 @@ def get_embedding_client(
 
 
 @lru_cache()
-def get_minio_settings() -> MinIOSettings:
-    return MinIOSettings()
-
-
-@lru_cache()
 def _get_minio_client() -> MinIOClient:
     """Caches the MinIO session per application lifecycle."""
-    settings = get_minio_settings()
+    settings = MinIOSettings()
     return MinIOClient(
         endpoint_url=settings.MINIO_ENDPOINT,
         access_key=settings.MINIO_USER,
