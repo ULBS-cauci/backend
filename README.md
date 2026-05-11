@@ -310,7 +310,7 @@ After installation, make sure the service is running:
 
 ### 2. Build the Model
 
-We pin the exact model weights and quantization using a `Modelfile` (analogous to a `Dockerfile`). The file is already at `embedding/Modelfile`:
+We pin the exact model weights and quantization using a `Modelfile` (analogous to a `Dockerfile`). The file is already at backend:
 
 ```dockerfile
 FROM hf.co/Qwen/Qwen3-Embedding-4B-GGUF:Q8_0
@@ -319,7 +319,7 @@ FROM hf.co/Qwen/Qwen3-Embedding-4B-GGUF:Q8_0
 Run this once from the `backend/` directory:
 
 ```bash
-ollama create my-project-embed -f embedding/Modelfile
+ollama create my-project-embed -f Modelfile
 ```
 
 This downloads the model from Hugging Face (~8 GB on first run) and tags it locally as `my-project-embed`.
