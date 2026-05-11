@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     OPENAI_LLM_MODEL: str = "gpt-4o-mini"
     LLM_TEMPERATURE: float = 0.2
 
+    # CORS
+    # When set via environment variables / .env, pydantic-settings expects
+    # list[str] values to be provided as a JSON array string, e.g.
+    # ALLOWED_ORIGINS='["http://localhost:3000","http://127.0.0.1:3000"]'
+
     # Relational DB Settings (PostgreSQL)
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
