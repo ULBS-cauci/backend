@@ -3,8 +3,8 @@ from typing import List
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Optional, PointStruct, VectorParams, Distance
 
-from app.data_access.interfaces.vector_db import VectorDBInterface
-from app.schemas.vector_schemas import DocumentChunk, SearchResult
+from data_access.interfaces.vector_db import VectorDBInterface
+from schemas.vector_schemas import DocumentChunk, SearchResult
 
 class QdrantClient(VectorDBInterface):
     def __init__(self, endpoint: str, api_key: Optional[str] = None):
