@@ -66,10 +66,6 @@ dmypy.json
 *.log
 
 # Docker volume data (paths match docker-compose.yml mounts in backend/)
-qdrant_data/
-minio_data/
+data/
 
 scripts/
-
-#PostgreSQL local data
-postgres_data/

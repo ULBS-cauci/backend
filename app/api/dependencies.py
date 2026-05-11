@@ -1,118 +1,134 @@
 from functools import lru_cache
 from fastapi import Depends
-from app.core.config import Settings
+from app.core.config import (
+    AppSettings,
+    QdrantSettings,
+    OllamaSettings,
+    OpenAISettings,
+    MinIOSettings,
+    PostgresSettings,
+)
 from app.data_access.clients.qdrant_client import QdrantClient
 from app.data_access.interfaces.vector_db import VectorDBInterface
 
-from app.data_access.interfaces.embedding import IEmbeddingClient
+from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.data_access.clients.embedding_client import OllamaEmbeddingClient
 
 from app.data_access.interfaces.llm import LLMInterface
 from app.data_access.clients.openai_client import OpenAILLMClient
 
+from app.data_access.interfaces.object_storage import ObjectStorageInterface
+from app.data_access.clients.minio_client import MinIOClient
+
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlalchemy.engine import URL  
+from sqlalchemy.engine import URL
 from typing import AsyncGenerator
 
 
 @lru_cache()
-def get_settings() -> Settings:
-    """Reads and caches the settings so they are only initialized once."""
-    return Settings()
+def get_app_settings() -> AppSettings:
+    """Reads and caches the provider-selector settings. Never raises — all fields have defaults."""
+    return AppSettings()
 
 
 @lru_cache()
 def _get_qdrant_client() -> QdrantClient:
     """Caches the Qdrant connection pool per application lifecycle."""
-    settings = get_settings()
+    settings = QdrantSettings()
     return QdrantClient(
-        endpoint=settings.VECTOR_DB_ENDPOINT, api_key=settings.VECTOR_DB_SERVICE_API_KEY
+        endpoint=settings.QDRANT_ENDPOINT, api_key=settings.QDRANT_API_KEY
     )
 
 
 def get_vector_db_client(
-    settings: Settings = Depends(get_settings),
+    app: AppSettings = Depends(get_app_settings),
 ) -> VectorDBInterface:
     """Yields the configured Vector Database client."""
-    if settings.VECTOR_DB_TYPE == "qdrant":
+    if app.VECTOR_DB_CLIENT_TYPE == "qdrant":
         return _get_qdrant_client()
-    else:
-        raise ValueError(f"Unsupported Vector Database type: {settings.VECTOR_DB_TYPE}")
+    raise ValueError(f"Unsupported Vector Database type: {app.VECTOR_DB_CLIENT_TYPE}")
 
 
 @lru_cache()
-def _get_ollama_client() -> IEmbeddingClient:
-    """Caches the Ollama connection pool per application lifecycle."""
-    settings = get_settings()
-    return OllamaEmbeddingClient(
-        host=settings.OLLAMA_HOST, model_name=settings.OLLAMA_EMBED_MODEL
-    )
+def _get_ollama_embedding_client() -> OllamaEmbeddingClient:
+    """Caches the Ollama embedding client per application lifecycle."""
+    settings = OllamaSettings()
+    return OllamaEmbeddingClient(host=settings.OLLAMA_HOST, model_name=settings.OLLAMA_EMBED_MODEL)
 
 
 @lru_cache()
-def _get_openai_client() -> OpenAILLMClient:
+def _get_openai_llm_client() -> OpenAILLMClient:
     """Caches the OpenAI client per application lifecycle."""
-    settings = get_settings()
+    settings = OpenAISettings()
     return OpenAILLMClient(
         api_key=settings.OPENAI_API_KEY,
         model=settings.OPENAI_LLM_MODEL,
-        temperature=settings.LLM_TEMPERATURE,
+        temperature=settings.OPENAI_TEMPERATURE,
     )
 
 
-def get_llm_client(settings: Settings = Depends(get_settings)) -> LLMInterface:
-    """
-    Yields the configured LLM client according to environment settings.
-    Typed against the ABC interface to preserve complete DI flexibility.
-    """
-    if settings.LLM_CLIENT_TYPE == "openai":
-        return _get_openai_client()
-    else:
-        raise ValueError(f"Unsupported LLM Client type: {settings.LLM_CLIENT_TYPE}")
+def get_llm_client(app: AppSettings = Depends(get_app_settings)) -> LLMInterface:
+    """Yields the configured LLM client. Typed against the ABC interface."""
+    if app.LLM_CLIENT_TYPE == "openai":
+        return _get_openai_llm_client()
+    raise ValueError(f"Unsupported LLM Client type: {app.LLM_CLIENT_TYPE}")
 
 
 def get_embedding_client(
-    settings: Settings = Depends(get_settings),
-) -> IEmbeddingClient:
-    """
-    Yields the configured Embedding client according to environment settings.
-    Typed against the ABC interface to preserve complete DI flexibility.
-    """
-    if settings.EMBEDDING_CLIENT_TYPE == "ollama":
-        return _get_ollama_client()
-    else:
-        raise ValueError(
-            f"Unsupported Embedding Client type: {settings.EMBEDDING_CLIENT_TYPE}"
-        )
+    app: AppSettings = Depends(get_app_settings),
+) -> EmbeddingInterface:
+    """Yields the configured Embedding client. Typed against the ABC interface."""
+    if app.EMBEDDING_CLIENT_TYPE == "ollama":
+        return _get_ollama_embedding_client()
+    raise ValueError(f"Unsupported Embedding Client type: {app.EMBEDDING_CLIENT_TYPE}")
+
+
+@lru_cache()
+def get_minio_settings() -> MinIOSettings:
+    return MinIOSettings()
+
+
+@lru_cache()
+def _get_minio_client() -> MinIOClient:
+    """Caches the MinIO session per application lifecycle."""
+    settings = get_minio_settings()
+    return MinIOClient(
+        endpoint_url=settings.MINIO_ENDPOINT,
+        access_key=settings.MINIO_USER,
+        secret_key=settings.MINIO_PASSWORD,
+        use_ssl=settings.MINIO_USE_SSL,
+    )
+
+
+def get_object_storage_client(
+    app: AppSettings = Depends(get_app_settings),
+) -> ObjectStorageInterface:
+    """Yields the configured Object Storage client."""
+    if app.OBJECT_STORAGE_CLIENT_TYPE == "minio":
+        return _get_minio_client()
+    raise ValueError(f"Unsupported Object Storage type: {app.OBJECT_STORAGE_CLIENT_TYPE}")
+
 
 @lru_cache()
 def _get_async_engine() -> AsyncEngine:
-    """
-    Caches the SQLAlchemy/SQLModel AsyncEngine.
-    The engine manages the connection pool to PostgreSQL and should only be created once.
-    """
-    settings = get_settings()
-    
+    """Caches the SQLAlchemy/SQLModel AsyncEngine. Created once per application lifecycle."""
+    settings = PostgresSettings()
     database_url = URL.create(
         drivername="postgresql+asyncpg",
         username=settings.POSTGRES_USER,
         password=settings.POSTGRES_PASSWORD,
         host=settings.POSTGRES_HOST,
         port=settings.POSTGRES_PORT,
-        database=settings.POSTGRES_DB
+        database=settings.POSTGRES_DB,
     )
-    
-    # pool_size can be tuned based on expected load and database capacity
-    # If you encounter connection issues under load, consider increasing pool_size and max_overflow, but be mindful of the database's max connections limit.
-    return create_async_engine(database_url, echo=False, pool_pre_ping=True, pool_size=5, max_overflow=50)
+    return create_async_engine(
+        database_url, echo=False, pool_pre_ping=True, pool_size=5, max_overflow=50
+    )
 
-    
+
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Generates a fresh database session for each incoming request.
-    Handles commit automatically on success, and rollback on failure.
-    """
+    """Generates a fresh database session for each incoming request."""
     engine = _get_async_engine()
     async with AsyncSession(engine, expire_on_commit=False) as session:
         try:
