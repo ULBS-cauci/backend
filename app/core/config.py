@@ -2,47 +2,49 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 
-class Settings(BaseSettings):
-    # Vector DB
-    VECTOR_DB_TYPE: str
-    VECTOR_DB_ENDPOINT: str
-    VECTOR_DB_SERVICE_API_KEY: Optional[str] = None
+class _Base(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
-    # Object Storage
-    OBJECT_STORAGE_TYPE: str
-    OBJECT_STORAGE_ENDPOINT: str
-    OBJECT_STORAGE_ACCESS_KEY: str
-    OBJECT_STORAGE_SECRET_KEY: str
-    OBJECT_STORAGE_USE_SSL: bool = True
 
-    # General Embedding Client Selection (e.g., "ollama", "openai")
-    EMBEDDING_CLIENT_TYPE: str
+class AppSettings(_Base):
+    """Provider selectors — controls which concrete client is wired per interface.
+    All fields have defaults, so this class never raises a ValidationError at startup.
+    """
 
-    # Ollama embedding model settings
-    OLLAMA_HOST: str
+    VECTOR_DB_CLIENT_TYPE: str = "qdrant"
+    EMBEDDING_CLIENT_TYPE: str = "ollama"
+    LLM_CLIENT_TYPE: str = "openai"
+    OBJECT_STORAGE_CLIENT_TYPE: str = "minio"
+
+
+class QdrantSettings(_Base):
+    QDRANT_ENDPOINT: str
+    QDRANT_API_KEY: Optional[str] = None
+
+
+class OllamaSettings(_Base):
+    OLLAMA_HOST: str = "http://localhost:11434"
     OLLAMA_EMBED_MODEL: str
 
-    # General LLM Client Selection (e.g., "openai", "ollama")
-    LLM_CLIENT_TYPE: str
 
-    # OpenAI LLM settings
+class OpenAISettings(_Base):
     OPENAI_API_KEY: str
     OPENAI_LLM_MODEL: str = "gpt-4o-mini"
-    LLM_TEMPERATURE: float = 0.2
+    OPENAI_TEMPERATURE: float = 0.2
 
-    # CORS
-    # When set via environment variables / .env, pydantic-settings expects
-    # list[str] values to be provided as a JSON array string, e.g.
-    # ALLOWED_ORIGINS='["http://localhost:3000","http://127.0.0.1:3000"]'
 
-    # Relational DB Settings (PostgreSQL)
+class MinIOSettings(_Base):
+    MINIO_ENDPOINT: str
+    MINIO_USER: str
+    MINIO_PASSWORD: str
+    MINIO_USE_SSL: bool = False
+
+
+class PostgresSettings(_Base):
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432
-
-    # This tells Pydantic to look for the .env file in your root directory
-    model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
-    )
