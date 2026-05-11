@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List
 from typing import AsyncIterator
-from schemas.llm_schemas import ChatMessage
+from app.schemas.llm_schemas import ChatMessage
 
 
 class LLMInterface(ABC):

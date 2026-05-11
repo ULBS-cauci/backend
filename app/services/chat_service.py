@@ -3,7 +3,7 @@ from typing import AsyncIterator
 from app.data_access.interfaces.llm import LLMInterface
 from app.schemas.llm_schemas import ChatMessage, MessageRole
 from app.data_access.interfaces.vector_db import VectorDBInterface
-from app.data_access.interfaces.embedding import IEmbeddingClient
+from app.data_access.interfaces.embedding import EmbeddingInterface
 
 TUTOR_SYSTEM_PROMPT = (
     "You are a university tutor for the AI Tutor platform. "
@@ -15,7 +15,7 @@ class ChatService:
     def __init__(
         self, 
         vector_db: VectorDBInterface, 
-        embedding_client: IEmbeddingClient,
+        embedding_client: EmbeddingInterface,
         llm_client: LLMInterface
     ):
         self.vector_db = vector_db

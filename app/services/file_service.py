@@ -7,14 +7,14 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from app.data_access.interfaces.vector_db import VectorDBInterface
-from app.data_access.interfaces.embedding import IEmbeddingClient
+from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.schemas.vector_schemas import DocumentChunk, DocumentMetadata
 
 class FileService:
     def __init__(
         self, 
         vector_db: VectorDBInterface, 
-        embed_client: IEmbeddingClient,
+        embed_client: EmbeddingInterface    ,
         text_splitter: RecursiveCharacterTextSplitter,
         db: AsyncSession  
     ):

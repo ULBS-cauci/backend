@@ -14,8 +14,8 @@ from app.core.config import (
 from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.data_access.clients.embedding_client import OllamaEmbeddingClient
 
-from data_access.interfaces.llm import LLMInterface
-from data_access.clients.openai_client import OpenAILLMClient
+from app.data_access.interfaces.llm import LLMInterface
+from app.data_access.clients.openai_client import OpenAILLMClient
 
 from app.services.chat_service import ChatService
 from app.data_access.interfaces.object_storage import ObjectStorageInterface
@@ -130,6 +130,7 @@ def _get_async_engine() -> AsyncEngine:
         host=settings.POSTGRES_HOST,
         port=settings.POSTGRES_PORT,
         database=settings.POSTGRES_DB,
+        query={"ssl": "disable"},
     )
     return create_async_engine(
         database_url, echo=False, pool_pre_ping=True, pool_size=5, max_overflow=50
@@ -149,15 +150,21 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 def get_file_service(
-    vector_db = Depends(get_vector_db_client),
-    embed_client = Depends(get_embedding_client)
+    vector_db: VectorDBInterface = Depends(get_vector_db_client),
+    embed_client: EmbeddingInterface = Depends(get_embedding_client),
+    db: AsyncSession = Depends(get_db_session)
 ) -> FileService:
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-    return FileService(vector_db, embed_client, splitter)
+    return FileService(
+        vector_db=vector_db, 
+        embed_client=embed_client, 
+        text_splitter=splitter,
+        db=db
+    )
 
 def get_chat_service(
-    vector_db = Depends(get_vector_db_client),
-    embedding_client = Depends(get_embedding_client),
-    llm_client = Depends(get_llm_client)
+    vector_db: VectorDBInterface = Depends(get_vector_db_client),
+    embedding_client: EmbeddingInterface = Depends(get_embedding_client),
+    llm_client: LLMInterface = Depends(get_llm_client)
 ) -> ChatService:
-    return ChatService(vector_db, embedding_client, llm_client)    
+    return ChatService(vector_db, embedding_client, llm_client)

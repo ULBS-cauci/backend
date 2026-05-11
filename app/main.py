@@ -8,13 +8,15 @@ logger = logging.getLogger("uvicorn.error")
 
 # Important: We must import all SQLModel schemas here so that SQLModel.metadata is fully populated 
 # before we try to create the tables natively.
-from schemas.course_schemas import Course
-from schemas.user_schemas import User
-from schemas.knowledge_schemas import FileEntity
-from schemas.chat_schemas import ChatSession, Message, Attachment, SharedLink
-from schemas.admin_schemas import SystemPrompt, LlmTip
+from app.schemas.course_schemas import Course
+from app.schemas.user_schemas import User
+from app.schemas.knowledge_schemas import FileEntity
+from app.schemas.chat_schemas import ChatSession, Message, Attachment, SharedLink
+from app.schemas.admin_schemas import SystemPrompt, LlmTip
 
-from api.dependencies import _get_async_engine
+from app.api.dependencies import _get_async_engine
+
+from app.api.routers import chat, files
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
