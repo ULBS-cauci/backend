@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = 0.2
 
     # CORS
-    ALLOWED_ORIGINS: str = "http://localhost:3000"
+    ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
 
     # Relational DB Settings (PostgreSQL)
     POSTGRES_USER: str

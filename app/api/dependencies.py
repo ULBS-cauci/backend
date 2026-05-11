@@ -10,6 +10,8 @@ from app.data_access.clients.embedding_client import OllamaEmbeddingClient
 from app.data_access.interfaces.llm import LLMInterface
 from app.data_access.clients.openai_client import OpenAILLMClient
 
+from app.services.chat_service import ChatService
+
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.engine import URL
@@ -59,9 +61,6 @@ def _get_openai_client() -> OpenAILLMClient:
         model=settings.OPENAI_LLM_MODEL,
         temperature=settings.LLM_TEMPERATURE,
     )
-
-
-from app.services.chat_service import ChatService
 
 
 def get_llm_client(settings: Settings = Depends(get_settings)) -> LLMInterface:
