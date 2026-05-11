@@ -4,14 +4,11 @@ from pydantic import BaseModel
 
 from app.services.chat_service import ChatService
 from app.api.dependencies import get_chat_service
+from app.schemas.chat_schemas import ChatRequest
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-class ChatRequest(BaseModel):
-    message: str
-    collection_name: str = "university_library"
 
 @router.post("/query")
 async def ask_question(
