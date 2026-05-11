@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import SQLModel
+from app.api.routers import sessions
 
 from app.api.dependencies import _get_async_engine
 from app.api.routers import files, chat
@@ -20,6 +21,7 @@ async def lifespan(app: FastAPI):
     
     await engine.dispose()
 
+
 app = FastAPI(
     title="AI Tutor API",
     description="Backend API for the RAG-based AI Tutor system.",
@@ -27,14 +29,16 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS (Critical for allowing your frontend to talk to the backend)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, change this to your actual frontend URL
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(sessions.router, prefix="/api/v1/sessions", tags=["Sessions"])
+
 
 @app.get("/")
 async def root():
