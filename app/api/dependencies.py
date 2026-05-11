@@ -94,7 +94,7 @@ def get_embedding_client(
 @lru_cache()
 def _get_minio_client() -> MinIOClient:
     """Caches the MinIO session per application lifecycle."""
-    settings = get_minio_settings()
+    settings = MinIOSettings()
     return MinIOClient(
         endpoint_url=settings.MINIO_ENDPOINT,
         access_key=settings.MINIO_USER,
