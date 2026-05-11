@@ -17,6 +17,7 @@ from app.data_access.clients.embedding_client import OllamaEmbeddingClient
 from app.data_access.interfaces.llm import LLMInterface
 from app.data_access.clients.openai_client import OpenAILLMClient
 
+from app.services.chat_service import ChatService
 from app.data_access.interfaces.object_storage import ObjectStorageInterface
 from app.data_access.clients.minio_client import MinIOClient
 
@@ -54,7 +55,9 @@ def get_vector_db_client(
 def _get_ollama_embedding_client() -> OllamaEmbeddingClient:
     """Caches the Ollama embedding client per application lifecycle."""
     settings = OllamaSettings()
-    return OllamaEmbeddingClient(host=settings.OLLAMA_HOST, model_name=settings.OLLAMA_EMBED_MODEL)
+    return OllamaEmbeddingClient(
+        host=settings.OLLAMA_HOST, model_name=settings.OLLAMA_EMBED_MODEL
+    )
 
 
 @lru_cache()
@@ -73,6 +76,10 @@ def get_llm_client(app: AppSettings = Depends(get_app_settings)) -> LLMInterface
     if app.LLM_CLIENT_TYPE == "openai":
         return _get_openai_llm_client()
     raise ValueError(f"Unsupported LLM Client type: {app.LLM_CLIENT_TYPE}")
+
+
+def get_chat_service(llm: LLMInterface = Depends(get_llm_client)) -> ChatService:
+    return ChatService(llm=llm)
 
 
 def get_embedding_client(
@@ -107,7 +114,9 @@ def get_object_storage_client(
     """Yields the configured Object Storage client."""
     if app.OBJECT_STORAGE_CLIENT_TYPE == "minio":
         return _get_minio_client()
-    raise ValueError(f"Unsupported Object Storage type: {app.OBJECT_STORAGE_CLIENT_TYPE}")
+    raise ValueError(
+        f"Unsupported Object Storage type: {app.OBJECT_STORAGE_CLIENT_TYPE}"
+    )
 
 
 @lru_cache()

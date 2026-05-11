@@ -10,7 +10,9 @@ class _Base(BaseSettings):
 
 class AppSettings(_Base):
     """Provider selectors — controls which concrete client is wired per interface.
-    All fields have defaults, so this class never raises a ValidationError at startup."""
+    All fields have defaults, so this class never raises a ValidationError at startup.
+    """
+
     VECTOR_DB_CLIENT_TYPE: str = "qdrant"
     EMBEDDING_CLIENT_TYPE: str = "ollama"
     LLM_CLIENT_TYPE: str = "openai"
