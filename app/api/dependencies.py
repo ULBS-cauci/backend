@@ -116,18 +116,11 @@ def get_object_storage_client(
         f"Unsupported Object Storage type: {app.OBJECT_STORAGE_CLIENT_TYPE}"
     )
 
-
 @lru_cache()
 def _get_async_engine() -> AsyncEngine:
-    
     """Caches the SQLAlchemy/SQLModel AsyncEngine. Created once per application lifecycle."""
-
     settings = PostgresSettings()
     
-    query_params = {}
-    if settings.POSTGRES_SSL:
-        query_params["ssl"] = settings.POSTGRES_SSL
-
     database_url = URL.create(
         drivername="postgresql+asyncpg",
         username=settings.POSTGRES_USER,
@@ -135,11 +128,17 @@ def _get_async_engine() -> AsyncEngine:
         host=settings.POSTGRES_HOST,
         port=settings.POSTGRES_PORT,
         database=settings.POSTGRES_DB,
-        query=query_params, 
     )
     
+    ssl_context = False if settings.POSTGRES_SSL == "disable" else None
+
     return create_async_engine(
-        database_url, echo=False, pool_pre_ping=True, pool_size=5, max_overflow=50
+        database_url, 
+        echo=False, 
+        pool_pre_ping=True, 
+        pool_size=5, 
+        max_overflow=50,
+        connect_args={"ssl": ssl_context} if ssl_context is not None else {}
     )
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
