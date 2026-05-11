@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = 0.2
 
     # CORS
+    # When set via environment variables / .env, pydantic-settings expects
+    # list[str] values to be provided as a JSON array string, e.g.
+    # ALLOWED_ORIGINS='["http://localhost:3000","http://127.0.0.1:3000"]'
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
 
     # Relational DB Settings (PostgreSQL)
