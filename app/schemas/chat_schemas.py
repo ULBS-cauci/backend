@@ -4,6 +4,7 @@ import uuid
 from enum import Enum
 from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, DateTime, func
+from pydantic import BaseModel
 
 class MessageSender(str, Enum): 
     USER = "User"
@@ -94,3 +95,10 @@ class SharedLink(SharedLinkBase, table=True):
 class SharedLinkPublic(SharedLinkBase):
     id: uuid.UUID
     created_at: datetime
+
+class AskRequest(BaseModel):
+    query: str = Field(
+        ...,
+        min_length=5,
+        description="The student's question to be answered by the LLM.",
+    )
