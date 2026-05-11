@@ -33,13 +33,13 @@ from typing import AsyncGenerator
 @lru_cache()
 def get_app_settings() -> AppSettings:
     """Reads and caches the provider-selector settings. Never raises — all fields have defaults."""
-    return AppSettings()
+    return AppSettings() # type: ignore
 
 
 @lru_cache()
 def _get_qdrant_client() -> QdrantClient:
     """Caches the Qdrant connection pool per application lifecycle."""
-    settings = QdrantSettings()
+    settings = QdrantSettings()  # type: ignore
     return QdrantClient(
         endpoint=settings.QDRANT_ENDPOINT, api_key=settings.QDRANT_API_KEY
     )
@@ -57,7 +57,7 @@ def get_vector_db_client(
 @lru_cache()
 def _get_ollama_embedding_client() -> OllamaEmbeddingClient:
     """Caches the Ollama embedding client per application lifecycle."""
-    settings = OllamaSettings()
+    settings = OllamaSettings()  # type: ignore
     return OllamaEmbeddingClient(
         host=settings.OLLAMA_HOST, model_name=settings.OLLAMA_EMBED_MODEL
     )
@@ -66,7 +66,7 @@ def _get_ollama_embedding_client() -> OllamaEmbeddingClient:
 @lru_cache()
 def _get_openai_llm_client() -> OpenAILLMClient:
     """Caches the OpenAI client per application lifecycle."""
-    settings = OpenAISettings()
+    settings = OpenAISettings()  # type: ignore
     return OpenAILLMClient(
         api_key=settings.OPENAI_API_KEY,
         model=settings.OPENAI_LLM_MODEL,
@@ -95,7 +95,7 @@ def get_embedding_client(
 @lru_cache()
 def _get_minio_client() -> MinIOClient:
     """Caches the MinIO session per application lifecycle."""
-    settings = MinIOSettings()
+    settings = MinIOSettings()  # type: ignore
     return MinIOClient(
         endpoint_url=settings.MINIO_ENDPOINT,
         access_key=settings.MINIO_USER,
@@ -118,7 +118,7 @@ def get_object_storage_client(
 @lru_cache()
 def _get_async_engine() -> AsyncEngine:
     """Caches the SQLAlchemy/SQLModel AsyncEngine. Created once per application lifecycle."""
-    settings = PostgresSettings()
+    settings = PostgresSettings()  # type: ignore
     database_url = URL.create(
         drivername="postgresql+asyncpg",
         username=settings.POSTGRES_USER,
