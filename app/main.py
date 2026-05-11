@@ -1,12 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routers import sessions
-from app.core.config import Settings
 
 # Import your routers here as you build them
 # from app.api.routers import sessions, auth, files, admin
 
-settings = Settings()
 
 app = FastAPI(
     title="AI Tutor API",
@@ -16,7 +14,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
