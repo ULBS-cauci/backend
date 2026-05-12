@@ -34,17 +34,17 @@ class FileService:
             raise ValueError("Only PDF files are accepted.")
 
         content = await file.read()
-        collection = await self.process_and_index_pdf(content, filename)
+        collection_name = await self.process_and_index_pdf(content, filename)
         
         new_doc = DocumentMetadata(
             filename=filename,
-            qdrant_collection=collection
+            qdrant_collection=collection_name
         )
         self.db.add(new_doc)
         await self.db.flush() 
         await self.db.refresh(new_doc)
         
-        return collection
+        return collection_name
 
     async def process_and_index_pdf(self, content: bytes, filename: str) -> str:
         full_text = await asyncio.to_thread(self._extract_text_from_pdf, content)
@@ -64,9 +64,18 @@ class FileService:
         ]
 
         vectors = await self.embed_client.embed_batch(text_chunks)
+
+        # Guard against embedding service returning no vectors
+        if not vectors:
+            raise ValueError(f"Embedding service returned no vectors for document {filename}.")
+
         collection_name = "university_library"
         vector_size = len(vectors[0])
-        
+
+        # Ensure vectors and chunks align
+        if len(vectors) != len(domain_chunks):
+            raise ValueError("Number of embeddings does not match number of text chunks.")
+
         await self.vector_db.create_collection(collection_name, vector_size)
         await self.vector_db.upsert_chunks(collection_name, domain_chunks, vectors)
 

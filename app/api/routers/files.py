@@ -7,17 +7,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/upload")
-async def upload_textbook(
+async def upload_file(
     file: UploadFile = File(...),
     file_service: FileService = Depends(get_file_service) 
 ):
     try:
-        collection = await file_service.upload_and_index(file)
+        collection_name = await file_service.upload_and_index(file)
         
         return {
             "status": "success",
             "message": f"Document {file.filename} uploaded and indexed.",
-            "collection": collection  
+            "collection": collection_name     
         }
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
