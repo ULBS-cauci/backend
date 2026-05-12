@@ -44,24 +44,3 @@ class ChatService:
             return ""
         
         return "\n---\n".join([res.chunk.text for res in search_results])
-
-    async def answer_question(self, question: str, collection_name: str) -> str:
-        """
-        Public method that orchestrates the retrieval of context and generation of the answer.
-        """
-        context = await self._get_context(question, collection_name)
-        
-        messages = [
-            ChatMessage(
-                role=MessageRole.SYSTEM, 
-                content=TUTOR_SYSTEM_PROMPT
-            ),
-            ChatMessage(
-                role=MessageRole.USER, 
-                content=f"Context: {context}\n\nQuestion: {question}"
-            )
-        ]
-
-        answer = await self.llm_client.generate(messages)
-        
-        return answer
