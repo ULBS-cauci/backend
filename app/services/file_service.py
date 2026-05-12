@@ -8,7 +8,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.data_access.interfaces.embedding import EmbeddingInterface
-from app.schemas.vector_schemas import DocumentChunk, DocumentMetadata
+from app.schemas.vector_schemas import DocumentChunk
+from app.schemas.knowledge_schemas import Material
 
 class FileService:
     def __init__(
@@ -28,7 +29,7 @@ class FileService:
         page_texts = [page.extract_text() or "" for page in pdf.pages]
         return "\n\n".join(page_texts)
 
-    async def upload_and_index(self, file: UploadFile) -> str: 
+    async def upload_and_index(self, file: UploadFile, course_id: uuid.UUID, user_id: uuid.UUID) -> str: 
         filename = file.filename or "unnamed_document.pdf"
         if not filename.lower().endswith(".pdf"):
             raise ValueError("Only PDF files are accepted.")
@@ -36,13 +37,16 @@ class FileService:
         content = await file.read()
         collection_name = await self.process_and_index_pdf(content, filename)
         
-        new_doc = DocumentMetadata(
-            filename=filename,
-            qdrant_collection=collection_name
+        material = Material(
+            course_id=course_id,
+            file_name=filename,
+            file_type="pdf",
+            vector_namespace=collection_name,
+            uploaded_by=user_id
         )
-        self.db.add(new_doc)
-        await self.db.flush() 
-        await self.db.refresh(new_doc)
+        self.db.add(material)
+        await self.db.flush()
+        await self.db.refresh(material)
         
         return collection_name
 

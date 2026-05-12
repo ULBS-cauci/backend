@@ -1,4 +1,5 @@
 import logging
+import uuid
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from app.api.dependencies import get_file_service
 from app.services.file_service import FileService
@@ -6,13 +7,23 @@ from app.services.file_service import FileService
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-@router.post("/upload")
+@router.post("/courses/{course_id}/upload")
 async def upload_file(
+    course_id: uuid.UUID,
     file: UploadFile = File(...),
-    file_service: FileService = Depends(get_file_service) 
+    file_service: FileService = Depends(get_file_service),
+    user_id: uuid.UUID = None  # TODO: Extract from JWT token in security.py
 ):
     try:
-        collection_name = await file_service.upload_and_index(file)
+        # TODO: Get user_id from authenticated token instead of parameter
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User not authenticated")
+        
+        collection_name = await file_service.upload_and_index(
+            file,
+            course_id=course_id,
+            user_id=user_id
+        )
         
         return {
             "status": "success",
