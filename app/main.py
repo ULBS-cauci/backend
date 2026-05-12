@@ -10,7 +10,7 @@ logger = logging.getLogger("uvicorn.error")
 # before we try to create the tables natively.
 from app.schemas.course_schemas import Course
 from app.schemas.user_schemas import User
-from app.schemas.knowledge_schemas import FileEntity
+from app.schemas.knowledge_schemas import Material
 from app.schemas.chat_schemas import ChatSession, Message, Attachment, SharedLink
 from app.schemas.admin_schemas import SystemPrompt, LlmTip
 
@@ -67,4 +67,3 @@ async def root():
     return {"message": "AI Tutor API is running. Go to /docs for Swagger UI."}
 
 app.include_router(files.router, prefix="/api/v1/files", tags=["Files"])
-app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
