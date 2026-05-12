@@ -129,8 +129,6 @@ def _get_async_engine() -> AsyncEngine:
         port=settings.POSTGRES_PORT,
         database=settings.POSTGRES_DB,
     )
-    
-    ssl_context = False if settings.POSTGRES_SSL == "disable" else None
 
     return create_async_engine(
         database_url, 
@@ -138,7 +136,7 @@ def _get_async_engine() -> AsyncEngine:
         pool_pre_ping=True, 
         pool_size=5, 
         max_overflow=50,
-        connect_args={"ssl": ssl_context} if ssl_context is not None else {}
+        connect_args={"ssl": settings.POSTGRES_SSL} if settings.POSTGRES_SSL is not None else {}
     )
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:

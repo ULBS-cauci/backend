@@ -48,4 +48,4 @@ class PostgresSettings(_Base):
     POSTGRES_DB: str
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432
-    POSTGRES_SSL: str = "disable"  
+    POSTGRES_SSL: bool | None = None 
