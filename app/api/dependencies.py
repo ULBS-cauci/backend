@@ -33,7 +33,7 @@ from typing import AsyncGenerator
 @lru_cache()
 def get_app_settings() -> AppSettings:
     """Reads and caches the provider-selector settings. Never raises — all fields have defaults."""
-    return AppSettings() # type: ignore
+    return AppSettings()  # type: ignore
 
 
 @lru_cache()
@@ -79,8 +79,6 @@ def get_llm_client(app: AppSettings = Depends(get_app_settings)) -> LLMInterface
     if app.LLM_CLIENT_TYPE == "openai":
         return _get_openai_llm_client()
     raise ValueError(f"Unsupported LLM Client type: {app.LLM_CLIENT_TYPE}")
-
-
 
 
 def get_embedding_client(
@@ -143,31 +141,39 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
             await session.rollback()
             raise
 
+
 async def get_current_user(
     db: AsyncSession = Depends(get_db_session),
-    settings: AppSettings = Depends(get_app_settings)
+    settings: AppSettings = Depends(get_app_settings),
 ) -> User:
     if settings.ENVIRONMENT != "dev":
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication is currently only supported in dev environment",
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail=(
+                "Authentication is not implemented for non-dev environments. "
+                "Configure real authentication before enabling these routes outside dev."
+            ),
         )
 
-    dummy_id = uuid.UUID('00000000-0000-0000-0000-000000000001')
+    dummy_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
     user = await db.get(User, dummy_id)
     if not user:
         user = User(
-            id=dummy_id, 
-            email="dummy@student.com", 
-            first_name="Dummy", 
+            id=dummy_id,
+            email="dummy@student.com",
+            first_name="Dummy",
             last_name="Student",
             hashed_password="dummy_password",
-            role=UserRole.STUDENT
+            role=UserRole.STUDENT,
         )
         db.add(user)
         await db.commit()
         await db.refresh(user)
     return user
 
-def get_chat_service(llm: LLMInterface = Depends(get_llm_client), db: AsyncSession = Depends(get_db_session)) -> ChatService:
+
+def get_chat_service(
+    llm: LLMInterface = Depends(get_llm_client),
+    db: AsyncSession = Depends(get_db_session),
+) -> ChatService:
     return ChatService(llm=llm, db=db)

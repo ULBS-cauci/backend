@@ -5,6 +5,7 @@ from enum import Enum
 from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, DateTime, func
 
+from app.schemas.time_schema import TimeSchema
 
 class UserRole(str, Enum):
     STUDENT = "Student"
@@ -27,12 +28,10 @@ class UserBase(SQLModel):
 # ---------------------------------------------------------
 # 2. THE DB ENTITY (Strictly for the database layer)
 # ---------------------------------------------------------
-class User(UserBase, table=True):
+class User(UserBase, TimeSchema, table=True):
     __tablename__ = "users"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     hashed_password: str
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ---------------------------------------------------------

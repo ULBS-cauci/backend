@@ -4,6 +4,8 @@ import uuid
 from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, DateTime, func
 
+from app.schemas.time_schema import TimestampSchema
+
 # ---------------------------------------------------------
 # 1. THE BASE (Shared fields)
 # ---------------------------------------------------------
@@ -16,12 +18,11 @@ class FileEntityBase(SQLModel):
 # ---------------------------------------------------------
 # 2. THE DB ENTITY
 # ---------------------------------------------------------
-class FileEntity(FileEntityBase, table=True):
+class FileEntity(FileEntityBase, TimestampSchema, table=True):
     __tablename__ = "materials"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     uploaded_by: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id")
     object_storage_key: Optional[str] = Field(default=None, max_length=2048)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # ---------------------------------------------------------
 # 3. THE INPUT DTOs
