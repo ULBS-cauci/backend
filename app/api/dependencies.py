@@ -163,10 +163,3 @@ def get_file_service(
         text_splitter=splitter,
         db=db
     )
-
-def get_chat_service(
-    vector_db: VectorDBInterface = Depends(get_vector_db_client),
-    embedding_client: EmbeddingInterface = Depends(get_embedding_client),
-    llm_client: LLMInterface = Depends(get_llm_client)
-) -> ChatService:
-    return ChatService(vector_db, embedding_client, llm_client)
