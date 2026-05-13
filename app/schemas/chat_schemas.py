@@ -102,20 +102,3 @@ class AskRequest(BaseModel):
         min_length=5,
         description="The student's question to be answered by the LLM.",
     )
-
-class ChatRequest(BaseModel):
-    query: str = Field(
-        ...,
-        alias="message",
-        min_length=5,
-        description="The user's chat message to be answered by the LLM.",
-    )
-    collection_name: str = Field(
-        "university_library",
-        min_length=1,
-        description="The target collection used to scope retrieval.",
-    )
-
-    @property
-    def message(self) -> str:
-        return self.query
