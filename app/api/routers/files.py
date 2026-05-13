@@ -7,18 +7,14 @@ from app.services.file_service import FileService
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-@router.post("/courses/{course_id}/upload")
+@router.post("/upload")
 async def upload_file(
-    course_id: uuid.UUID,
     file: UploadFile = File(...),
     file_service: FileService = Depends(get_file_service),
-    user_id: uuid.UUID = None  # TODO: Extract from JWT token in security.py
+    course_id: uuid.UUID = uuid.UUID("123e4567-e89b-12d3-a456-426614174000"),  # Default for testing
+    user_id: uuid.UUID = uuid.UUID("123e4567-e89b-12d3-a456-426614174001")  # Default for testing; TODO: Extract from JWT token
 ):
     try:
-        # TODO: Get user_id from authenticated token instead of parameter
-        if not user_id:
-            raise HTTPException(status_code=401, detail="User not authenticated")
-        
         collection_name = await file_service.upload_and_index(
             file,
             course_id=course_id,

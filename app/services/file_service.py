@@ -37,16 +37,18 @@ class FileService:
         content = await file.read()
         collection_name = await self.process_and_index_pdf(content, filename)
         
-        material = Material(
-            course_id=course_id,
-            file_name=filename,
-            file_type="pdf",
-            vector_namespace=collection_name,
-            uploaded_by=user_id
-        )
-        self.db.add(material)
-        await self.db.flush()
-        await self.db.refresh(material)
+        # TODO: Create Material record when real course_id and user_id are available
+        # For now, skip database insert to test PDF ingestion and Qdrant integration
+        # material = Material(
+        #     course_id=course_id,
+        #     file_name=filename,
+        #     file_type="pdf",
+        #     vector_namespace=collection_name,
+        #     uploaded_by=user_id
+        # )
+        # self.db.add(material)
+        # await self.db.flush()
+        # await self.db.refresh(material)
         
         return collection_name
 
