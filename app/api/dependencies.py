@@ -138,7 +138,7 @@ def _get_async_engine() -> AsyncEngine:
         pool_pre_ping=True, 
         pool_size=5, 
         max_overflow=50,
-        connect_args={"ssl": settings.POSTGRES_SSL} if settings.POSTGRES_SSL is not None else {}
+        connect_args={"ssl": settings.POSTGRES_SSL}
     )
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
