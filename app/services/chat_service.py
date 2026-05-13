@@ -2,6 +2,8 @@ from typing import AsyncIterator
 
 from app.data_access.interfaces.llm import LLMInterface
 from app.schemas.llm_schemas import ChatMessage, MessageRole
+from app.data_access.interfaces.vector_db import VectorDBInterface
+from app.data_access.interfaces.embedding import EmbeddingInterface
 
 TUTOR_SYSTEM_PROMPT = (
     "You are a university tutor for the AI Tutor platform. "
@@ -9,15 +11,44 @@ TUTOR_SYSTEM_PROMPT = (
     "If you're not sure about something, say so."
 )
 
-
 class ChatService:
-    def __init__(self, llm: LLMInterface):
-        self._llm = llm
+    def __init__(
+        self, 
+        vector_db: VectorDBInterface, 
+        embedding_client: EmbeddingInterface,
+        llm_client: LLMInterface
+    ):
+        self.vector_db = vector_db
+        self.embedding_client = embedding_client
+        self.llm_client = llm_client
 
     async def ask_stream(self, query: str) -> AsyncIterator[str]:
+        """Stream a response with RAG context from the vector database."""
+        context = await self._get_context(query, collection_name="university_library")
+        
+        if context:
+            user_content = f"Context from documents:\n{context}\n\nQuestion: {query}"
+        else:
+            user_content = query
+        
         messages = [
             ChatMessage(role=MessageRole.SYSTEM, content=TUTOR_SYSTEM_PROMPT),
-            ChatMessage(role=MessageRole.USER, content=query),
+            ChatMessage(role=MessageRole.USER, content=user_content),
         ]
-        async for chunk in self._llm.stream(messages):
+        async for chunk in self.llm_client.stream(messages):
             yield chunk
+
+
+    async def _get_context(self, question: str, collection_name: str) -> str:
+        """Private method to retrieve relevant context from the vector database based on the question."""
+        query_vector = await self.embedding_client.embed_text(question)
+        search_results = await self.vector_db.search(
+            collection_name=collection_name,
+            query_vector=query_vector,
+            limit=3
+        )
+
+        if not search_results:
+            return ""
+        
+        return "\n---\n".join([res.chunk.text for res in search_results])

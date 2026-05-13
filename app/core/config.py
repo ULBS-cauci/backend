@@ -48,3 +48,4 @@ class PostgresSettings(_Base):
     POSTGRES_DB: str
     POSTGRES_HOST: str
     POSTGRES_PORT: int
+    POSTGRES_SSL: bool = False

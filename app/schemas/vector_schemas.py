@@ -1,6 +1,6 @@
 import uuid
 from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any
 
 class DocumentChunk(BaseModel):
     id: uuid.UUID
@@ -9,4 +9,4 @@ class DocumentChunk(BaseModel):
 
 class SearchResult(BaseModel):
     chunk: DocumentChunk
-    score: float # Standardized score (0.0 to 1.0)
+    score: float # Standardized score (0.0 to 1.0)    
