@@ -31,8 +31,8 @@ class OllamaSettings(_Base):
 
 class OpenAISettings(_Base):
     OPENAI_API_KEY: str
-    OPENAI_LLM_MODEL: str = "gpt-4o-mini"
-    OPENAI_TEMPERATURE: float = 0.2
+    OPENAI_LLM_MODEL: str
+    OPENAI_TEMPERATURE: float
 
 
 class MinIOSettings(_Base):
