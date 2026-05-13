@@ -25,14 +25,14 @@ class QdrantSettings(_Base):
 
 
 class OllamaSettings(_Base):
-    OLLAMA_HOST: str = "http://localhost:11434"
+    OLLAMA_HOST: str
     OLLAMA_EMBED_MODEL: str
 
 
 class OpenAISettings(_Base):
     OPENAI_API_KEY: str
-    OPENAI_LLM_MODEL: str = "gpt-4o-mini"
-    OPENAI_TEMPERATURE: float = 0.2
+    OPENAI_LLM_MODEL: str
+    OPENAI_TEMPERATURE: float
 
 
 class MinIOSettings(_Base):
@@ -46,5 +46,5 @@ class PostgresSettings(_Base):
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
-    POSTGRES_HOST: str = "localhost"
-    POSTGRES_PORT: int = 5432
+    POSTGRES_HOST: str
+    POSTGRES_PORT: int
