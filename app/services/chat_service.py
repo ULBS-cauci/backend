@@ -23,9 +23,17 @@ class ChatService:
         self.llm_client = llm_client
 
     async def ask_stream(self, query: str) -> AsyncIterator[str]:
+        """Stream a response with RAG context from the vector database."""
+        context = await self._get_context(query, collection_name="university_library")
+        
+        if context:
+            user_content = f"Context from documents:\n{context}\n\nQuestion: {query}"
+        else:
+            user_content = query
+        
         messages = [
             ChatMessage(role=MessageRole.SYSTEM, content=TUTOR_SYSTEM_PROMPT),
-            ChatMessage(role=MessageRole.USER, content=query),
+            ChatMessage(role=MessageRole.USER, content=user_content),
         ]
         async for chunk in self.llm_client.stream(messages):
             yield chunk

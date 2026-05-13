@@ -36,7 +36,7 @@ def get_app_settings() -> AppSettings:
     return AppSettings()
 
 
-# Vector Database Dependency
+
 @lru_cache()
 def _get_qdrant_client() -> QdrantClient:
     """Caches the Qdrant connection pool per application lifecycle."""
@@ -55,7 +55,6 @@ def get_vector_db_client(
     raise ValueError(f"Unsupported Vector Database type: {app.VECTOR_DB_CLIENT_TYPE}")
 
 
-# LLM Dependency
 @lru_cache()
 def _get_openai_llm_client() -> OpenAILLMClient:
     """Caches the OpenAI client per application lifecycle."""
@@ -73,12 +72,6 @@ def get_llm_client(app: AppSettings = Depends(get_app_settings)) -> LLMInterface
         return _get_openai_llm_client()
     raise ValueError(f"Unsupported LLM Client type: {app.LLM_CLIENT_TYPE}")
 
-
-def get_chat_service(llm: LLMInterface = Depends(get_llm_client)) -> ChatService:
-    return ChatService(llm=llm)
-
-
-# Embedding Client Dependency
 @lru_cache()
 def _get_ollama_embedding_client() -> OllamaEmbeddingClient:
     """Caches the Ollama embedding client per application lifecycle."""
@@ -86,7 +79,6 @@ def _get_ollama_embedding_client() -> OllamaEmbeddingClient:
     return OllamaEmbeddingClient(
         host=settings.OLLAMA_HOST, model_name=settings.OLLAMA_EMBED_MODEL
     )
-
 
 def get_embedding_client(
     app: AppSettings = Depends(get_app_settings),
@@ -96,8 +88,14 @@ def get_embedding_client(
         return _get_ollama_embedding_client()
     raise ValueError(f"Unsupported Embedding Client type: {app.EMBEDDING_CLIENT_TYPE}")
 
+def get_chat_service(
+    vector_db: VectorDBInterface = Depends(get_vector_db_client),
+    embedding_client: EmbeddingInterface = Depends(get_embedding_client),
+    llm_client: LLMInterface = Depends(get_llm_client)
+) -> ChatService:
+    return ChatService(vector_db=vector_db, embedding_client=embedding_client, llm_client=llm_client)
 
-# Object Storage Dependency
+
 @lru_cache()
 def _get_minio_client() -> MinIOClient:
     """Caches the MinIO session per application lifecycle."""
@@ -120,8 +118,6 @@ def get_object_storage_client(
         f"Unsupported Object Storage type: {app.OBJECT_STORAGE_CLIENT_TYPE}"
     )
 
-
-# Database Session Dependency
 @lru_cache()
 def _get_async_engine() -> AsyncEngine:
     """Caches the SQLAlchemy/SQLModel AsyncEngine. Created once per application lifecycle."""
@@ -169,3 +165,4 @@ def get_file_service(
         text_splitter=splitter,
         db=db
     )
+
