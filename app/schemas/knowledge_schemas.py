@@ -9,7 +9,7 @@ from app.schemas.time_schema import TimestampSchema
 # ---------------------------------------------------------
 # 1. THE BASE (Shared fields)
 # ---------------------------------------------------------
-class FileEntityBase(SQLModel):
+class MaterialBase(SQLModel):
     course_id: uuid.UUID = Field(foreign_key="courses.id")
     file_name: str = Field(max_length=255)
     file_type: Optional[str] = Field(default=None, max_length=50)
@@ -18,7 +18,7 @@ class FileEntityBase(SQLModel):
 # ---------------------------------------------------------
 # 2. THE DB ENTITY
 # ---------------------------------------------------------
-class FileEntity(FileEntityBase, TimestampSchema, table=True):
+class Material(MaterialBase, TimestampSchema, table=True):
     __tablename__ = "materials"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     uploaded_by: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id")
@@ -27,13 +27,13 @@ class FileEntity(FileEntityBase, TimestampSchema, table=True):
 # ---------------------------------------------------------
 # 3. THE INPUT DTOs
 # ---------------------------------------------------------
-class FileEntityCreate(FileEntityBase):
+class MaterialCreate(MaterialBase):
     pass
 
 # ---------------------------------------------------------
 # 4. THE OUTPUT DTO
 # ---------------------------------------------------------
-class FileEntityPublic(FileEntityBase):
+class MaterialPublic(MaterialBase):
     id: uuid.UUID
     uploaded_by: Optional[uuid.UUID]
     object_storage_key: Optional[str]

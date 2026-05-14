@@ -36,7 +36,6 @@ class QdrantClient(VectorDBInterface):
             query=query_vector,
             limit=limit,
             with_payload=True,
-            with_vectors=False,
         )
 
         domain_results = []

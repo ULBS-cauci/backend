@@ -6,3 +6,5 @@ ollama
 openai
 sqlmodel
 asyncpg
+pypdf>=4.2.0
+langchain-text-splitters

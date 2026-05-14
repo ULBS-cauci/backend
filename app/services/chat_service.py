@@ -7,6 +7,8 @@ import datetime
 from app.data_access.interfaces.llm import LLMInterface
 from app.schemas.chat_schemas import Conversation, Message, MessageSender
 from app.schemas.llm_schemas import ChatMessage, MessageRole
+from app.data_access.interfaces.vector_db import VectorDBInterface
+from app.data_access.interfaces.embedding import EmbeddingInterface
 
 from fastapi import HTTPException, status
 
@@ -17,10 +19,17 @@ TUTOR_SYSTEM_PROMPT = (
 )
 
 class ChatService:
-    def __init__(self, llm: LLMInterface, db: AsyncSession):
-        self._llm = llm
-        self._db = db
-
+   def __init__(
+        self, 
+        vector_db: VectorDBInterface, 
+        embedding_client: EmbeddingInterface,
+        llm_client: LLMInterface
+    ):
+        self.vector_db = vector_db
+        self.embedding_client = embedding_client
+        self.llm_client = llm_client
+        
+        
     async def create_conversation(self, user_id: uuid.UUID) -> Conversation:
         conversation = Conversation(user_id=user_id, title="New Conversation_" + datetime.datetime.now().isoformat())
         self._db.add(conversation)
@@ -100,3 +109,17 @@ class ChatService:
         )
         self._db.add(ai_message)
         await self._db.commit()
+
+    async def _get_context(self, question: str, collection_name: str) -> str:
+        """Private method to retrieve relevant context from the vector database based on the question."""
+        query_vector = await self.embedding_client.embed_text(question)
+        search_results = await self.vector_db.search(
+            collection_name=collection_name,
+            query_vector=query_vector,
+            limit=3
+        )
+
+        if not search_results:
+            return ""
+        
+        return "\n---\n".join([res.chunk.text for res in search_results])
