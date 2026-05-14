@@ -16,7 +16,7 @@ Before writing or modifying code, please consult the relevant architectural docu
   - `app/services/`: Core Business Logic
   - `app/data_access/`: External clients (MinIO, Qdrant, OpenAI, Embedding)
   - `app/rag_engine/`: Specific RAG algorithms (Fusion, Context Build, Query Rewrite)
-  - `app/models/` and `app/schemas/`: DB Models and Pydantic validation
+  - `app/schemas/`: DB models and Pydantic validation
 
 ## Run & Test Commands
 Most infrastructure is handled via Docker Compose.
