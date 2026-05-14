@@ -19,38 +19,40 @@ TUTOR_SYSTEM_PROMPT = (
 )
 
 class ChatService:
-   def __init__(
+    def __init__(
         self, 
         vector_db: VectorDBInterface, 
         embedding_client: EmbeddingInterface,
-        llm_client: LLMInterface
+        llm_client: LLMInterface,
+        db_session: AsyncSession
     ):
         self.vector_db = vector_db
         self.embedding_client = embedding_client
         self.llm_client = llm_client
+        self.db_session = db_session
         
         
     async def create_conversation(self, user_id: uuid.UUID) -> Conversation:
         conversation = Conversation(user_id=user_id, title="New Conversation_" + datetime.datetime.now().isoformat())
-        self._db.add(conversation)
-        await self._db.flush()
-        await self._db.refresh(conversation)
+        self.db_session.add(conversation)
+        await self.db_session.flush()
+        await self.db_session.refresh(conversation)
         return conversation
 
     async def get_user_conversations(self, user_id: uuid.UUID) -> List[Conversation]:
         stmt = select(Conversation).where(Conversation.user_id == user_id).order_by(desc(Conversation.updated_at))
-        result = await self._db.exec(stmt)
+        result = await self.db_session.exec(stmt)
         return list(result.all())
 
     async def get_conversation_for_user(self, conversation_id: uuid.UUID, user_id: uuid.UUID) -> Optional[Conversation]:
-        conversation = await self._db.get(Conversation, conversation_id)
+        conversation = await self.db_session.get(Conversation, conversation_id)
         if conversation and conversation.user_id == user_id:
             return conversation
         return None
 
     async def get_conversation_messages(self, conversation_id: uuid.UUID) -> List[Message]:
         stmt = select(Message).where(Message.conversation_id == conversation_id).order_by(asc(Message.created_at))
-        result = await self._db.exec(stmt)
+        result = await self.db_session.exec(stmt)
         return list(result.all())
 
     async def ask_stream(self, query: str, user_id: uuid.UUID, conversation_id: Optional[uuid.UUID] = None) -> AsyncIterator[str]:
@@ -58,9 +60,9 @@ class ChatService:
         if not conversation_id:
             title = query[:50] + "..." if len(query) > 50 else query
             conversation = Conversation(user_id=user_id, title=title)
-            self._db.add(conversation)
-            await self._db.flush()
-            await self._db.refresh(conversation)
+            self.db_session.add(conversation)
+            await self.db_session.flush()
+            await self.db_session.refresh(conversation)
             conversation_id = conversation.id
         else:
             conversation = await self.get_conversation_for_user(conversation_id, user_id)
@@ -69,8 +71,8 @@ class ChatService:
             
             # Update timestamp
             conversation.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
-            self._db.add(conversation)
-            await self._db.flush()
+            self.db_session.add(conversation)
+            await self.db_session.flush()
 
         # 2. Extract history and build context
         history = await self.get_conversation_messages(conversation_id)
@@ -89,14 +91,14 @@ class ChatService:
             sender=MessageSender.USER,
             content=query
         )
-        self._db.add(user_message)
-        await self._db.flush()
+        self.db_session.add(user_message)
+        await self.db_session.flush()
         # Commit midway to ensure user message is visible even if generation fails or takes long
-        await self._db.commit()
+        await self.db_session.commit()
 
         # 3. Stream from LLM
         chunks = []
-        async for chunk in self._llm.stream(messages):
+        async for chunk in self.llm_client.stream(messages):
             chunks.append(chunk)
             yield chunk
         full_answer = "".join(chunks)
@@ -107,8 +109,8 @@ class ChatService:
             sender=MessageSender.AI,
             content=full_answer
         )
-        self._db.add(ai_message)
-        await self._db.commit()
+        self.db_session.add(ai_message)
+        await self.db_session.commit()
 
     async def _get_context(self, question: str, collection_name: str) -> str:
         """Private method to retrieve relevant context from the vector database based on the question."""
