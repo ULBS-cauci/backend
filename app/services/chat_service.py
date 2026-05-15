@@ -3,6 +3,9 @@ from typing import AsyncIterator, List, Optional
 from sqlmodel import select, desc, asc
 from sqlmodel.ext.asyncio.session import AsyncSession
 import datetime
+import logging
+
+logger = logging.getLogger("uvicorn.error")
 
 from app.data_access.interfaces.llm import LLMInterface
 from app.schemas.chat_schemas import Conversation, Message, MessageSender
@@ -82,6 +85,12 @@ class ChatService:
             role = MessageRole.USER if msg.sender == MessageSender.USER else MessageRole.ASSISTANT
             messages.append(ChatMessage(role=role, content=msg.content))
         
+        context = await self._get_context(query, collection_name="university_library")
+        if context:
+            logger.info(f"Retrieved context for question '{query}': {context}")
+            messages.append(ChatMessage(role=MessageRole.SYSTEM, content="Here are some relevant documents from the university library that might help you answer the question:"))  
+            messages.append(ChatMessage(role=MessageRole.SYSTEM, content=context))
+        logger.info(f"a trecut de retrieve")
         # Add new query
         messages.append(ChatMessage(role=MessageRole.USER, content=query))
         

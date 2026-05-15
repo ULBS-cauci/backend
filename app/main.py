@@ -16,7 +16,7 @@ from app.schemas.admin_schemas import SystemPrompt, LlmTip
 
 from app.api.dependencies import _get_async_engine
 
-from app.api.routers import chat, files
+from app.api.routers import files
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
