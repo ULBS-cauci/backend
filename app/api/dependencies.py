@@ -27,7 +27,6 @@ from sqlalchemy.engine import URL
 from typing import AsyncGenerator
 
 from app.services.file_service import FileService
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 @lru_cache()
@@ -158,11 +157,9 @@ def get_file_service(
     embed_client: EmbeddingInterface = Depends(get_embedding_client),
     db: AsyncSession = Depends(get_db_session)
 ) -> FileService:
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
     return FileService(
         vector_db=vector_db, 
         embed_client=embed_client, 
-        text_splitter=splitter,
         db=db
     )
 

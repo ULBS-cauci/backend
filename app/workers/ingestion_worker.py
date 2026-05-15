@@ -36,8 +36,10 @@ def extract_text_from_pdf(content: bytes) -> str:
             raise ValueError("PDF contains no extractable text")
             
         return full_text
+    except ValueError:
+        raise
     except Exception as e:
-        raise ValueError(f"Failed to extract text from PDF: {str(e)}")
+        raise ValueError(f"Failed to extract text from PDF: {str(e)}") from e
 
 
 def split_text_into_chunks(
@@ -71,8 +73,10 @@ def split_text_into_chunks(
             raise ValueError("Text splitting produced no chunks")
             
         return chunks
+    except ValueError:
+        raise
     except Exception as e:
-        raise ValueError(f"Failed to split text into chunks: {str(e)}")
+        raise ValueError(f"Failed to split text into chunks: {str(e)}") from e
 
 
 def create_document_chunks(
