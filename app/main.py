@@ -42,6 +42,7 @@ async def lifespan(app: FastAPI):
 # Import your routers here as you build them
 # from app.api.routers import sessions, auth, files, admin
 from app.api.routers import sessions
+from app.api.routers import course
 
 app = FastAPI(
     title="AI Tutor API",
@@ -67,3 +68,4 @@ async def root():
     return {"message": "AI Tutor API is running. Go to /docs for Swagger UI."}
 
 app.include_router(files.router, prefix="/api/v1/files", tags=["Files"])
+app.include_router(course.router, prefix="/api/v1/courses", tags=["Courses"])

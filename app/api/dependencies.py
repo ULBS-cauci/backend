@@ -18,9 +18,9 @@ from app.data_access.interfaces.llm import LLMInterface
 from app.data_access.clients.openai_client import OpenAILLMClient
 
 from app.services.chat_service import ChatService
+from app.services.course_service import CourseService
 from app.data_access.interfaces.object_storage import ObjectStorageInterface
 from app.data_access.clients.minio_client import MinIOClient
-
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.engine import URL
@@ -34,7 +34,6 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 def get_app_settings() -> AppSettings:
     """Reads and caches the provider-selector settings. Never raises — all fields have defaults."""
     return AppSettings()
-
 
 
 @lru_cache()
@@ -72,6 +71,7 @@ def get_llm_client(app: AppSettings = Depends(get_app_settings)) -> LLMInterface
         return _get_openai_llm_client()
     raise ValueError(f"Unsupported LLM Client type: {app.LLM_CLIENT_TYPE}")
 
+
 @lru_cache()
 def _get_ollama_embedding_client() -> OllamaEmbeddingClient:
     """Caches the Ollama embedding client per application lifecycle."""
@@ -79,6 +79,7 @@ def _get_ollama_embedding_client() -> OllamaEmbeddingClient:
     return OllamaEmbeddingClient(
         host=settings.OLLAMA_HOST, model_name=settings.OLLAMA_EMBED_MODEL
     )
+
 
 def get_embedding_client(
     app: AppSettings = Depends(get_app_settings),
@@ -88,12 +89,15 @@ def get_embedding_client(
         return _get_ollama_embedding_client()
     raise ValueError(f"Unsupported Embedding Client type: {app.EMBEDDING_CLIENT_TYPE}")
 
+
 def get_chat_service(
     vector_db: VectorDBInterface = Depends(get_vector_db_client),
     embedding_client: EmbeddingInterface = Depends(get_embedding_client),
-    llm_client: LLMInterface = Depends(get_llm_client)
+    llm_client: LLMInterface = Depends(get_llm_client),
 ) -> ChatService:
-    return ChatService(vector_db=vector_db, embedding_client=embedding_client, llm_client=llm_client)
+    return ChatService(
+        vector_db=vector_db, embedding_client=embedding_client, llm_client=llm_client
+    )
 
 
 @lru_cache()
@@ -118,11 +122,12 @@ def get_object_storage_client(
         f"Unsupported Object Storage type: {app.OBJECT_STORAGE_CLIENT_TYPE}"
     )
 
+
 @lru_cache()
 def _get_async_engine() -> AsyncEngine:
     """Caches the SQLAlchemy/SQLModel AsyncEngine. Created once per application lifecycle."""
     settings = PostgresSettings()
-    
+
     database_url = URL.create(
         drivername="postgresql+asyncpg",
         username=settings.POSTGRES_USER,
@@ -133,13 +138,14 @@ def _get_async_engine() -> AsyncEngine:
     )
 
     return create_async_engine(
-        database_url, 
-        echo=False, 
-        pool_pre_ping=True, 
-        pool_size=5, 
+        database_url,
+        echo=False,
+        pool_pre_ping=True,
+        pool_size=5,
         max_overflow=50,
-        connect_args={"ssl": settings.POSTGRES_SSL}
+        connect_args={"ssl": settings.POSTGRES_SSL},
     )
+
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """Generates a fresh database session for each incoming request."""
@@ -153,16 +159,16 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+def get_course_service(db: AsyncSession = Depends(get_db_session)):
+    return CourseService(db=db)
+
+
 def get_file_service(
     vector_db: VectorDBInterface = Depends(get_vector_db_client),
     embed_client: EmbeddingInterface = Depends(get_embedding_client),
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
 ) -> FileService:
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
     return FileService(
-        vector_db=vector_db, 
-        embed_client=embed_client, 
-        text_splitter=splitter,
-        db=db
+        vector_db=vector_db, embed_client=embed_client, text_splitter=splitter, db=db
     )
-
