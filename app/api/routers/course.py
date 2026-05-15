@@ -1,8 +1,9 @@
 import uuid
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from app.api.dependencies import get_course_service
 from app.services.course_service import CourseService
-from app.schemas.course_schemas import CoursePublic
+from app.schemas.course_schemas import CourseCreate, CoursePublic
+from app.schemas.knowledge_schemas import MaterialPublic
 
 router = APIRouter()
 
@@ -21,3 +22,19 @@ async def get_all_courses(
     course_service: CourseService = Depends(get_course_service),
 ):
     return await course_service.get_all_courses()
+
+
+@router.get("/{course_id}/materials", response_model=list[MaterialPublic])
+async def get_course_materials(
+    course_id: uuid.UUID,
+    course_service: CourseService = Depends(get_course_service),
+):
+    return await course_service.get_materials_by_course(course_id)
+
+
+@router.post("/", response_model=CoursePublic, status_code=status.HTTP_201_CREATED)
+async def create_course(
+    course_data: CourseCreate,
+    course_service: CourseService = Depends(get_course_service),
+):
+    return await course_service.create_course(course_data, HARDCODED_TEACHER_ID)
