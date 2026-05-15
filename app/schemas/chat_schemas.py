@@ -6,33 +6,29 @@ from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, DateTime, func
 from pydantic import BaseModel
 
+from app.schemas.time_schema import TimeSchema, TimestampSchema
+
 class MessageSender(str, Enum): 
     USER = "User"
     SYSTEM = "System"
     AI = "AI"
 
 # ==========================================
-# CHAT SESSION
+# CHAT CONVERSATION
 # ==========================================
-class ChatSessionBase(SQLModel):
+class ConversationBase(SQLModel):
     user_id: uuid.UUID = Field(foreign_key="users.id")
     course_id: Optional[uuid.UUID] = Field(default=None, foreign_key="courses.id")
     title: str = Field(default="New Conversation", max_length=255)
 
-class ChatSession(ChatSessionBase, table=True):
+class Conversation(ConversationBase, TimeSchema, table=True):
     __tablename__ = "conversations"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    )
-    updated_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-    )
 
-class ChatSessionCreate(ChatSessionBase):
+class ConversationCreate(ConversationBase):
     pass
 
-class ChatSessionPublic(ChatSessionBase):
+class ConversationPublic(ConversationBase):
     id: uuid.UUID
     created_at: datetime
     updated_at: datetime
@@ -46,16 +42,18 @@ class MessageBase(SQLModel):
     content: str
     output_type_requested: Optional[str] = Field(default=None, max_length=100)
 
-class Message(MessageBase, table=True):
+class Message(MessageBase, TimestampSchema, table=True):
     __tablename__ = "messages"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    )
 
 class MessagePublic(MessageBase):
     id: uuid.UUID
     created_at: datetime
+
+class MessageCreate(SQLModel):
+    conversation_id: Optional[uuid.UUID] = None
+    content: str = Field(..., min_length=5, description="The content of the message.")
+    output_type_requested: Optional[str] = Field(default=None, max_length=100)
 
 # ==========================================
 # ATTACHMENT
@@ -64,13 +62,10 @@ class AttachmentBase(SQLModel):
     message_id: uuid.UUID = Field(foreign_key="messages.id")
     file_name: str = Field(max_length=255)
     
-class Attachment(AttachmentBase, table=True):
+class Attachment(AttachmentBase, TimestampSchema, table=True):
     __tablename__ = "attachments"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     object_storage_key: str = Field(max_length=2048) # Replaces file_url
-    created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    )
 
 class AttachmentPublic(AttachmentBase):
     id: uuid.UUID
@@ -85,20 +80,12 @@ class SharedLinkBase(SQLModel): #
     token: str = Field(unique=True, max_length=64) # 
     expires_at: Optional[datetime] = Field(default=None)
 
-class SharedLink(SharedLinkBase, table=True):
+class SharedLink(SharedLinkBase, TimestampSchema, table=True):
     __tablename__ = "shared_links"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    )
 
 class SharedLinkPublic(SharedLinkBase):
     id: uuid.UUID
     created_at: datetime
 
-class AskRequest(BaseModel):
-    query: str = Field(
-        ...,
-        min_length=5,
-        description="The student's question to be answered by the LLM.",
-    )
+

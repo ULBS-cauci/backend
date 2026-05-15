@@ -4,6 +4,8 @@ import uuid
 from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, DateTime, func
 
+from app.schemas.time_schema import TimeSchema
+
 
 # ---------------------------------------------------------
 # 1. THE BASE (Shared fields)
@@ -16,23 +18,10 @@ class CourseBase(SQLModel):
 # ---------------------------------------------------------
 # 2. THE DB ENTITY
 # ---------------------------------------------------------
-class Course(CourseBase, table=True):
+class Course(CourseBase, TimeSchema, table=True):
     __tablename__ = "courses"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     held_by: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id")
-    created_at: datetime = Field(
-        sa_column=Column(
-            DateTime(timezone=True), server_default=func.now(), nullable=False
-        )
-    )
-    updated_at: datetime = Field(
-        sa_column=Column(
-            DateTime(timezone=True),
-            server_default=func.now(),
-            onupdate=func.now(),
-            nullable=False,
-        )
-    )
 
 
 # ---------------------------------------------------------
