@@ -20,7 +20,7 @@ class LLMInterface(ABC):
         pass
 
     @abstractmethod
-    async def stream(self, messages: List[ChatMessage]) -> AsyncIterator[str]:
+    def stream(self, messages: List[ChatMessage]) -> AsyncIterator[str]:
         """
         Stream a response based on the provided chat messages.
 
