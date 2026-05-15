@@ -10,6 +10,11 @@ from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.schemas.vector_schemas import DocumentChunk
 from app.schemas.knowledge_schemas import Material
+from app.workers.ingestion_worker import (
+    extract_text_from_pdf,
+    split_text_into_chunks,
+    create_document_chunks
+)
 
 class FileService:
     def __init__(
@@ -22,12 +27,7 @@ class FileService:
         self.vector_db = vector_db
         self.embed_client = embed_client
         self.splitter = text_splitter
-        self.db = db 
-
-    def _extract_text_from_pdf(self, content: bytes) -> str:
-        pdf = PdfReader(io.BytesIO(content))
-        page_texts = [page.extract_text() or "" for page in pdf.pages]
-        return "\n\n".join(page_texts)
+        self.db = db
 
     async def upload_and_index(self, file: UploadFile, course_id: uuid.UUID, user_id: uuid.UUID) -> str: 
         filename = file.filename or "unnamed_document.pdf"
@@ -53,21 +53,26 @@ class FileService:
         return collection_name
 
     async def process_and_index_pdf(self, content: bytes, filename: str) -> str:
-        full_text = await asyncio.to_thread(self._extract_text_from_pdf, content)
-        if not full_text.strip():
-            raise ValueError(f"Document {filename} contains no extractable text.")
-
-        text_chunks = self.splitter.split_text(full_text)
+        """
+        Process PDF: extract text, split into chunks, embed, and index to Qdrant.
+        Heavy lifting (PDF parsing, chunking) is delegated to worker threads.
+        """
+        full_text = await asyncio.to_thread(extract_text_from_pdf, content)
+        
+        text_chunks = await asyncio.to_thread(
+            split_text_into_chunks, 
+            full_text,
+            1000,  # chunk_size
+            100    # chunk_overlap
+        )
         if not text_chunks:
             raise ValueError("Could not create text chunks.")
-
-        domain_chunks = [
-            DocumentChunk(
-                id=str(uuid.uuid4()), 
-                text=text, 
-                metadata={"source": filename}
-            ) for text in text_chunks
-        ]
+        
+        domain_chunks = await asyncio.to_thread(
+            create_document_chunks,
+            text_chunks,
+            filename
+        )
 
         vectors = await self.embed_client.embed_batch(text_chunks)
 
