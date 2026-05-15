@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from typing import AsyncIterator, List, Optional
 from sqlmodel import select, desc, asc
@@ -12,6 +13,7 @@ from app.schemas.chat_schemas import Conversation, Message, MessageSender
 from app.schemas.llm_schemas import ChatMessage, MessageRole
 from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.data_access.interfaces.embedding import EmbeddingInterface
+from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
 
 from fastapi import HTTPException, status
 
@@ -23,15 +25,17 @@ TUTOR_SYSTEM_PROMPT = (
 
 class ChatService:
     def __init__(
-        self, 
-        vector_db: VectorDBInterface, 
+        self,
+        vector_db: VectorDBInterface,
         embedding_client: EmbeddingInterface,
         llm_client: LLMInterface,
-        db_session: AsyncSession
+        sparse_encoder: SparseEncoderInterface,
+        db_session: AsyncSession,
     ):
         self.vector_db = vector_db
         self.embedding_client = embedding_client
         self.llm_client = llm_client
+        self.sparse_encoder = sparse_encoder
         self.db_session = db_session
         
         
@@ -85,7 +89,7 @@ class ChatService:
             role = MessageRole.USER if msg.sender == MessageSender.USER else MessageRole.ASSISTANT
             messages.append(ChatMessage(role=role, content=msg.content))
         
-        context = await self._get_context(query, collection_name="university_library")
+        context = await self._retrieve_relevant_chunks(query, collection_name="university_library")  # TODO: collection_name should come from session/material metadata
         if context:
             logger.info(f"Retrieved context for question '{query}': {context}")
             messages.append(ChatMessage(role=MessageRole.SYSTEM, content="Here are some relevant documents from the university library that might help you answer the question:"))  
@@ -121,16 +125,35 @@ class ChatService:
         self.db_session.add(ai_message)
         await self.db_session.commit()
 
-    async def _get_context(self, question: str, collection_name: str) -> str:
-        """Private method to retrieve relevant context from the vector database based on the question."""
-        query_vector = await self.embedding_client.embed_text(question)
+    async def _retrieve_relevant_chunks(
+        self,
+        query: str,
+        collection_name: str,
+        limit: int = 5,
+    ) -> str:
+        """
+        Embed the query with both dense and sparse encoders, run hybrid search (RRF),
+        and return the retrieved chunks joined as a single string.
+
+        Args:
+            query: The student's question to embed and search against.
+            collection_name: The Qdrant collection to search (maps to a specific material).
+            limit: Maximum number of chunks to return after RRF fusion.
+
+        Returns:
+            A single string of relevant chunk texts separated by '---', or an empty string
+            if no chunks are found.
+        """
+        query_vector, sparse_query = await asyncio.gather(
+            self.embedding_client.embed_text(query),
+            self.sparse_encoder.encode_query(query),
+        )
+
         search_results = await self.vector_db.search(
             collection_name=collection_name,
             query_vector=query_vector,
-            limit=3
+            limit=limit,
+            sparse_query=sparse_query,
         )
 
-        if not search_results:
-            return ""
-        
-        return "\n---\n".join([res.chunk.text for res in search_results])
+        return "\n---\n".join(res.chunk.text for res in search_results)

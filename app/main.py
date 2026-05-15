@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 import logging
@@ -14,7 +15,7 @@ from app.schemas.knowledge_schemas import Material
 from app.schemas.chat_schemas import Conversation, Message, Attachment, SharedLink
 from app.schemas.admin_schemas import SystemPrompt, LlmTip
 
-from app.api.dependencies import _get_async_engine
+from app.api.dependencies import _get_async_engine, _get_bm25_sparse_encoder
 
 from app.api.routers import files
 
@@ -33,7 +34,11 @@ async def lifespan(app: FastAPI):
         # run_sync is required because create_all is a synchronous SQLAlchemy function
         await conn.run_sync(SQLModel.metadata.create_all)
     logger.info("Database tables initialized successfully.")
-    
+
+    logger.info("Pre-warming BM25 sparse encoder (downloads vocabulary if not cached)...")
+    await asyncio.to_thread(_get_bm25_sparse_encoder)
+    logger.info("BM25 sparse encoder ready.")
+
     yield
     
     # Optionally: Clean up engine on shutdown

@@ -1,6 +1,8 @@
 from functools import lru_cache
 from fastapi import Depends, HTTPException, status
 import uuid
+from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
+from app.data_access.clients.bm25_client import BM25SparseEncoder
 
 from app.schemas.user_schemas import User, UserRole
 from app.data_access.clients.qdrant_client import QdrantClient
@@ -182,16 +184,29 @@ async def get_current_user(
     return user
 
 
+@lru_cache()
+def _get_bm25_sparse_encoder() -> BM25SparseEncoder:
+    """Instantiates and caches the BM25 sparse encoder. Downloads vocabulary on first call."""
+    return BM25SparseEncoder()
+
+
+def get_sparse_encoder() -> SparseEncoderInterface:
+    """Yields the configured sparse encoder. Typed against the ABC interface."""
+    return _get_bm25_sparse_encoder()
+
+
 def get_chat_service(
     vector_db: VectorDBInterface = Depends(get_vector_db_client),
     embedding_client: EmbeddingInterface = Depends(get_embedding_client),
     llm_client: LLMInterface = Depends(get_llm_client),
+    sparse_encoder: SparseEncoderInterface = Depends(get_sparse_encoder),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> ChatService:
     return ChatService(
         vector_db=vector_db,
         embedding_client=embedding_client,
         llm_client=llm_client,
+        sparse_encoder=sparse_encoder,
         db_session=db_session,
     )
 
@@ -199,9 +214,14 @@ def get_chat_service(
 def get_file_service(
     vector_db: VectorDBInterface = Depends(get_vector_db_client),
     embed_client: EmbeddingInterface = Depends(get_embedding_client),
+    sparse_encoder: SparseEncoderInterface = Depends(get_sparse_encoder),
     db: AsyncSession = Depends(get_db_session),
 ) -> FileService:
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
     return FileService(
-        vector_db=vector_db, embed_client=embed_client, text_splitter=splitter, db=db
+        vector_db=vector_db,
+        embed_client=embed_client,
+        sparse_encoder=sparse_encoder,
+        text_splitter=splitter,
+        db=db,
     )

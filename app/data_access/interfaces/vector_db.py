@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import List
-from app.schemas.vector_schemas import DocumentChunk, SearchResult
+from typing import List, Optional
+from app.schemas.vector_schemas import DocumentChunk, SearchResult, SparseVectorSchema
 
 class VectorDBInterface(ABC):
     """
@@ -9,19 +9,21 @@ class VectorDBInterface(ABC):
     """
     
     @abstractmethod
-    async def create_collection(self, collection_name: str, vector_size: int) -> bool:
+    async def create_collection(self, collection_name: str, vector_size: int, sparse: bool = False) -> bool:
         """
         Creates a new collection/index in the vector database.
-        
+
         Args:
             collection_name (str): The unique identifier for the collection (e.g., 'biology_101').
             vector_size (int): The dimensionality of the embeddings (e.g., 768 for open-source, 1536 for OpenAI).
-            
+            sparse (bool): When True, creates named vector slots for both dense and BM25 sparse vectors.
+                           Defaults to False (flat unnamed dense vector, legacy behaviour).
+
         Returns:
             bool: True if the collection was successfully created, False if it already existed.
-            
+
         Note:
-            Implementations should default to using Cosine Similarity as the distance metric 
+            Implementations should default to using Cosine Similarity as the distance metric
             unless otherwise specified.
         """
         pass
@@ -44,40 +46,57 @@ class VectorDBInterface(ABC):
         pass
 
     @abstractmethod
-    async def search(self, collection_name: str, query_vector: List[float], limit: int = 5) -> List[SearchResult]:
+    async def search(
+        self,
+        collection_name: str,
+        query_vector: List[float],
+        limit: int = 5,
+        sparse_query: Optional[SparseVectorSchema] = None,
+    ) -> List[SearchResult]:
         """
-        Performs a semantic vector search to find the most relevant document chunks.
-        
+        Searches for the most relevant document chunks.
+
+        When sparse_query is provided, implementations must run hybrid search (dense + BM25 sparse)
+        and fuse results with RRF. When omitted, falls back to dense-only search.
+
         Args:
             collection_name (str): The name of the collection to search against.
-            query_vector (List[float]): The embedded numerical representation of the user's query.
-            limit (int, optional): The maximum number of results to return. Defaults to 5.
-            
+            query_vector (List[float]): Dense embedding of the user's query.
+            limit (int): Maximum number of results to return. Defaults to 5.
+            sparse_query (SparseVectorSchema, optional): BM25 sparse vector for the query.
+
         Returns:
-            List[SearchResult]: A list of domain models containing the chunk data and its relevance 
-            score, strictly sorted from highest relevance to lowest relevance.
+            List[SearchResult]: Results sorted from highest to lowest relevance score.
         """
         pass
 
     @abstractmethod
-    async def upsert_chunks(self, collection_name: str, chunks: List[DocumentChunk], vectors: List[List[float]]) -> bool:
+    async def upsert_chunks(
+        self,
+        collection_name: str,
+        chunks: List[DocumentChunk],
+        vectors: List[List[float]],
+        sparse_vectors: Optional[List[SparseVectorSchema]] = None,
+    ) -> bool:
         """
         Uploads document chunks and their corresponding embeddings into the database.
-        
+
+        When sparse_vectors is provided, implementations must store both dense and sparse vectors
+        as named vector slots ("dense" / "sparse"). When omitted, stores a flat dense vector (legacy).
+
         Args:
             collection_name (str): The destination collection.
             chunks (List[DocumentChunk]): Domain models containing the raw text, ID, and metadata.
-            vectors (List[List[float]]): The embeddings corresponding to each chunk.
-            
+            vectors (List[List[float]]): Dense embeddings corresponding to each chunk.
+            sparse_vectors (List[SparseVectorSchema], optional): BM25 sparse vectors for each chunk.
+
         Returns:
             bool: True if the batch upload was fully successful.
-            
+
         Raises:
-            ValueError: Implementations should raise an error if the length of `chunks` 
-            does not perfectly match the length of `vectors`.
-            
+            ValueError: If the length of chunks, vectors, or sparse_vectors do not all match.
+
         Note:
-            This is an "upsert" operation. If a chunk ID already exists in the database, 
-            it should overwrite the existing vector and payload.
+            This is an "upsert" operation. If a chunk ID already exists it is overwritten.
         """
         pass

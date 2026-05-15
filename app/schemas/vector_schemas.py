@@ -1,6 +1,12 @@
 import uuid
 from pydantic import BaseModel
-from typing import Dict, Any
+from typing import Dict, Any, List
+
+class SparseVectorSchema(BaseModel):
+    """BM25 sparse vector as parallel index/value lists (mirrors qdrant_client.models.SparseVector)."""
+    indices: List[int]
+    values: List[float]
+
 
 class DocumentChunk(BaseModel):
     id: uuid.UUID
