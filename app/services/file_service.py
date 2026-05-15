@@ -55,6 +55,9 @@ class FileService:
         )
 
         vectors = await self.embed_client.embed_batch(text_chunks)
+
+        if not vectors:
+            raise ValueError("Could not create embeddings.")
         
         vector_size = len(vectors[0])
         collection_name = f"university_library_{vector_size}"
