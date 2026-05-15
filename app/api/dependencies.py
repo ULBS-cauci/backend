@@ -28,6 +28,8 @@ from typing import AsyncGenerator
 
 from app.services.file_service import FileService
 
+from app.data_access.interfaces.text_splitter import TextSplitterInterface
+from app.data_access.clients.langchain_splitter_client import LangChainRecursiveSplitterClient
 
 @lru_cache()
 def get_app_settings() -> AppSettings:
@@ -152,14 +154,19 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+def get_text_splitter() -> TextSplitterInterface:
+    return LangChainRecursiveSplitterClient(chunk_size=1000, chunk_overlap=100)
+
 def get_file_service(
     vector_db: VectorDBInterface = Depends(get_vector_db_client),
     embed_client: EmbeddingInterface = Depends(get_embedding_client),
+    text_splitter: TextSplitterInterface = Depends(get_text_splitter), 
     db: AsyncSession = Depends(get_db_session)
 ) -> FileService:
+    
     return FileService(
         vector_db=vector_db, 
         embed_client=embed_client, 
+        text_splitter=text_splitter, 
         db=db
     )
-
