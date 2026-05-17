@@ -8,6 +8,7 @@ import logging
 
 logger = logging.getLogger("uvicorn.error")
 
+from app.rag_engine.fusion import rrf_fuse
 from app.data_access.interfaces.llm import LLMInterface
 from app.schemas.chat_schemas import Conversation, Message, MessageSender
 from app.schemas.llm_schemas import ChatMessage, MessageRole
@@ -149,11 +150,10 @@ class ChatService:
             self.sparse_encoder.encode_query(query),
         )
 
-        search_results = await self.vector_db.search(
-            collection_name=collection_name,
-            query_vector=query_vector,
-            limit=limit,
-            sparse_query=sparse_query,
+        semantic_results, keyword_results = await asyncio.gather(
+            self.vector_db.search(collection_name, query_vector, limit=limit * 2),
+            self.vector_db.search_sparse(collection_name, sparse_query, limit=limit * 2),
         )
 
-        return "\n---\n".join(res.chunk.text for res in search_results)
+        fused = rrf_fuse(semantic_results, keyword_results, limit=limit)
+        return "\n---\n".join(res.chunk.text for res in fused)

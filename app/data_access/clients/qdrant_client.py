@@ -4,7 +4,6 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
     PointStruct, VectorParams, Distance,
     SparseVectorParams, SparseIndexParams, SparseVector,
-    Prefetch, FusionQuery, Fusion,
 )
 
 from app.data_access.interfaces.vector_db import VectorDBInterface
@@ -41,50 +40,50 @@ class QdrantClient(VectorDBInterface):
         await self.client.delete_collection(collection_name=collection_name)
         return True
 
-    async def search(
-        self,
-        collection_name: str,
-        query_vector: List[float],
-        limit: int = 5,
-        sparse_query: Optional[SparseVectorSchema] = None,
-    ) -> List[SearchResult]:
-        if sparse_query is not None:
-            response = await self.client.query_points(
-                collection_name=collection_name,
-                prefetch=[
-                    Prefetch(query=query_vector, using="dense", limit=limit * 2),
-                    Prefetch(
-                        query=SparseVector(
-                            indices=sparse_query.indices,
-                            values=sparse_query.values,
-                        ),
-                        using="sparse",
-                        limit=limit * 2,
-                    ),
-                ],
-                query=FusionQuery(fusion=Fusion.RRF),
-                limit=limit,
-                with_payload=True,
-            )
-        else:
-            response = await self.client.query_points(
-                collection_name=collection_name,
-                query=query_vector,
-                limit=limit,
-                with_payload=True,
-            )
-
-        domain_results = []
-        for point in response.points:
+    def _map_points_to_results(self, points) -> List[SearchResult]:
+        results = []
+        for point in points:
             payload = point.payload or {}
             chunk = DocumentChunk(
                 id=uuid.UUID(str(point.id)),
                 text=payload.get("text", ""),
                 metadata=payload.get("metadata", {}),
             )
-            domain_results.append(SearchResult(chunk=chunk, score=point.score))
+            results.append(SearchResult(chunk=chunk, score=point.score))
+        return results
 
-        return domain_results
+    async def search(
+        self,
+        collection_name: str,
+        query_vector: List[float],
+        limit: int = 5,
+    ) -> List[SearchResult]:
+        response = await self.client.query_points(
+            collection_name=collection_name,
+            query=query_vector,
+            using="dense",
+            limit=limit,
+            with_payload=True,
+        )
+        return self._map_points_to_results(response.points)
+
+    async def search_sparse(
+        self,
+        collection_name: str,
+        sparse_query: SparseVectorSchema,
+        limit: int = 5,
+    ) -> List[SearchResult]:
+        response = await self.client.query_points(
+            collection_name=collection_name,
+            query=SparseVector(
+                indices=sparse_query.indices,
+                values=sparse_query.values,
+            ),
+            using="sparse",
+            limit=limit,
+            with_payload=True,
+        )
+        return self._map_points_to_results(response.points)
 
     async def upsert_chunks(
         self,

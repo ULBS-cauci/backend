@@ -51,22 +51,37 @@ class VectorDBInterface(ABC):
         collection_name: str,
         query_vector: List[float],
         limit: int = 5,
-        sparse_query: Optional[SparseVectorSchema] = None,
     ) -> List[SearchResult]:
         """
-        Searches for the most relevant document chunks.
-
-        When sparse_query is provided, implementations must run hybrid search (dense + BM25 sparse)
-        and fuse results with RRF. When omitted, falls back to dense-only search.
+        Performs a dense (semantic) vector search.
 
         Args:
             collection_name (str): The name of the collection to search against.
             query_vector (List[float]): Dense embedding of the user's query.
             limit (int): Maximum number of results to return. Defaults to 5.
-            sparse_query (SparseVectorSchema, optional): BM25 sparse vector for the query.
 
         Returns:
-            List[SearchResult]: Results sorted from highest to lowest relevance score.
+            List[SearchResult]: Results sorted from highest to lowest cosine similarity.
+        """
+        pass
+
+    @abstractmethod
+    async def search_sparse(
+        self,
+        collection_name: str,
+        sparse_query: SparseVectorSchema,
+        limit: int = 5,
+    ) -> List[SearchResult]:
+        """
+        Performs a sparse (BM25 keyword) vector search.
+
+        Args:
+            collection_name (str): The name of the collection to search against.
+            sparse_query (SparseVectorSchema): BM25 sparse vector for the query.
+            limit (int): Maximum number of results to return. Defaults to 5.
+
+        Returns:
+            List[SearchResult]: Results sorted from highest to lowest BM25 score.
         """
         pass
 
