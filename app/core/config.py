@@ -18,6 +18,7 @@ class AppSettings(_Base):
     EMBEDDING_CLIENT_TYPE: str = "ollama"
     LLM_CLIENT_TYPE: str = "openai"
     OBJECT_STORAGE_CLIENT_TYPE: str = "minio"
+    RERANKER_CLIENT_TYPE: str = "cross-encoder"
 
 
 class QdrantSettings(_Base):
@@ -50,3 +51,7 @@ class PostgresSettings(_Base):
     POSTGRES_HOST: str
     POSTGRES_PORT: int
     POSTGRES_SSL: bool = False
+
+
+class CrossEncoderSettings(_Base):
+    CROSS_ENCODER_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"

@@ -15,6 +15,7 @@ from app.schemas.llm_schemas import ChatMessage, MessageRole
 from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
+from app.data_access.interfaces.reranker import RerankerInterface
 
 from fastapi import HTTPException, status
 
@@ -31,12 +32,14 @@ class ChatService:
         embedding_client: EmbeddingInterface,
         llm_client: LLMInterface,
         sparse_encoder: SparseEncoderInterface,
+        reranker: RerankerInterface,
         db_session: AsyncSession,
     ):
         self.vector_db = vector_db
         self.embedding_client = embedding_client
         self.llm_client = llm_client
         self.sparse_encoder = sparse_encoder
+        self.reranker = reranker
         self.db_session = db_session
         
         
@@ -151,9 +154,10 @@ class ChatService:
         )
 
         semantic_results, keyword_results = await asyncio.gather(
-            self.vector_db.search(collection_name, query_vector, limit=limit * 2),
-            self.vector_db.search_sparse(collection_name, sparse_query, limit=limit * 2),
+            self.vector_db.search(collection_name, query_vector, limit=limit * 4),
+            self.vector_db.search_sparse(collection_name, sparse_query, limit=limit * 4),
         )
 
-        fused = rrf_fuse(semantic_results, keyword_results, limit=limit)
-        return "\n---\n".join(res.chunk.text for res in fused)
+        fused = rrf_fuse(semantic_results, keyword_results, limit=limit * 2)
+        reranked = await self.reranker.rerank(query, fused, top_n=limit)
+        return "\n---\n".join(res.chunk.text for res in reranked)

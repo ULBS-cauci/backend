@@ -3,6 +3,8 @@ from fastapi import Depends, HTTPException, status
 import uuid
 from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
 from app.data_access.clients.bm25_client import BM25SparseEncoder
+from app.data_access.interfaces.reranker import RerankerInterface
+from app.data_access.clients.cross_encoder_client import CrossEncoderReranker
 
 from app.schemas.user_schemas import User, UserRole
 from app.data_access.clients.qdrant_client import QdrantClient
@@ -14,6 +16,7 @@ from app.core.config import (
     OpenAISettings,
     MinIOSettings,
     PostgresSettings,
+    CrossEncoderSettings,
 )
 
 from app.data_access.interfaces.embedding import EmbeddingInterface
@@ -195,11 +198,26 @@ def get_sparse_encoder() -> SparseEncoderInterface:
     return _get_bm25_sparse_encoder()
 
 
+@lru_cache()
+def _get_cross_encoder_reranker() -> CrossEncoderReranker:
+    """Instantiates and caches the cross-encoder reranker. Downloads model on first call."""
+    settings = CrossEncoderSettings()  # type: ignore
+    return CrossEncoderReranker(model_name=settings.CROSS_ENCODER_MODEL)
+
+
+def get_reranker(app: AppSettings = Depends(get_app_settings)) -> RerankerInterface:
+    """Yields the configured reranker. Typed against the ABC interface."""
+    if app.RERANKER_CLIENT_TYPE == "cross-encoder":
+        return _get_cross_encoder_reranker()
+    raise ValueError(f"Unsupported reranker type: {app.RERANKER_CLIENT_TYPE}")
+
+
 def get_chat_service(
     vector_db: VectorDBInterface = Depends(get_vector_db_client),
     embedding_client: EmbeddingInterface = Depends(get_embedding_client),
     llm_client: LLMInterface = Depends(get_llm_client),
     sparse_encoder: SparseEncoderInterface = Depends(get_sparse_encoder),
+    reranker: RerankerInterface = Depends(get_reranker),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> ChatService:
     return ChatService(
@@ -207,6 +225,7 @@ def get_chat_service(
         embedding_client=embedding_client,
         llm_client=llm_client,
         sparse_encoder=sparse_encoder,
+        reranker=reranker,
         db_session=db_session,
     )
 

@@ -9,3 +9,4 @@ asyncpg
 pypdf>=4.2.0
 langchain-text-splitters
 fastembed>=0.5.0
+sentence-transformers

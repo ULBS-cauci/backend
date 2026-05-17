@@ -15,7 +15,7 @@ from app.schemas.knowledge_schemas import Material
 from app.schemas.chat_schemas import Conversation, Message, Attachment, SharedLink
 from app.schemas.admin_schemas import SystemPrompt, LlmTip
 
-from app.api.dependencies import _get_async_engine, _get_bm25_sparse_encoder
+from app.api.dependencies import _get_async_engine, _get_bm25_sparse_encoder, _get_cross_encoder_reranker
 
 from app.api.routers import files
 
@@ -38,6 +38,10 @@ async def lifespan(app: FastAPI):
     logger.info("Pre-warming BM25 sparse encoder (downloads vocabulary if not cached)...")
     await asyncio.to_thread(_get_bm25_sparse_encoder)
     logger.info("BM25 sparse encoder ready.")
+
+    logger.info("Pre-warming cross-encoder reranker (downloads model if not cached)...")
+    await asyncio.to_thread(_get_cross_encoder_reranker)
+    logger.info("Cross-encoder reranker ready.")
 
     yield
     
