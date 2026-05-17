@@ -13,6 +13,7 @@ class AppSettings(_Base):
     All fields have defaults, so this class never raises a ValidationError at startup.
     """
 
+    ENVIRONMENT: str = "dev"
     VECTOR_DB_CLIENT_TYPE: str = "qdrant"
     EMBEDDING_CLIENT_TYPE: str = "ollama"
     LLM_CLIENT_TYPE: str = "openai"
