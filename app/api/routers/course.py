@@ -2,7 +2,7 @@ import uuid
 from fastapi import APIRouter, Depends, status
 from app.api.dependencies import get_course_service
 from app.services.course_service import CourseService
-from app.schemas.course_schemas import CourseCreate, CoursePublic
+from app.schemas.course_schemas import CourseCreate, CoursePublic, CourseUpdate
 from app.schemas.knowledge_schemas import MaterialPublic
 
 router = APIRouter()
@@ -38,3 +38,20 @@ async def create_course(
     course_service: CourseService = Depends(get_course_service),
 ):
     return await course_service.create_course(course_data, HARDCODED_TEACHER_ID)
+
+
+@router.patch("/{course_id}", response_model=CoursePublic)
+async def update_course(
+    course_id: uuid.UUID,
+    course_data: CourseUpdate,
+    course_service: CourseService = Depends(get_course_service),
+):
+    return await course_service.update_course(course_id, course_data)
+
+
+@router.delete("/{course_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_course(
+    course_id: uuid.UUID,
+    course_service: CourseService = Depends(get_course_service),
+):
+    await course_service.delete_course(course_id)

@@ -1,7 +1,7 @@
 import uuid
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from app.schemas.course_schemas import Course, CourseCreate
+from app.schemas.course_schemas import Course, CourseCreate, CourseUpdate
 from app.schemas.knowledge_schemas import Material
 
 
@@ -29,3 +29,22 @@ class CourseService:
         await self.db.commit()
         await self.db.refresh(course)
         return course
+
+    async def update_course(self, course_id: uuid.UUID, course_data: CourseUpdate) -> Course | None:
+        result = await self.db.exec(select(Course).where(Course.id == course_id))
+        course = result.first()
+        if not course:
+            return None
+        for field, value in course_data.model_dump(exclude_unset=True).items():
+            setattr(course, field, value)
+        self.db.add(course)
+        await self.db.commit()
+        await self.db.refresh(course)
+        return course
+
+    async def delete_course(self, course_id: uuid.UUID) -> None:
+        result = await self.db.exec(select(Course).where(Course.id == course_id))
+        course = result.first()
+        if course:
+            await self.db.delete(course)
+            await self.db.commit()
