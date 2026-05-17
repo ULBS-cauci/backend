@@ -33,6 +33,7 @@ class ChatService:
         llm_client: LLMInterface,
         sparse_encoder: SparseEncoderInterface,
         reranker: RerankerInterface,
+        score_threshold: float,
         db_session: AsyncSession,
     ):
         self.vector_db = vector_db
@@ -40,6 +41,7 @@ class ChatService:
         self.llm_client = llm_client
         self.sparse_encoder = sparse_encoder
         self.reranker = reranker
+        self.score_threshold = score_threshold
         self.db_session = db_session
         
         
@@ -96,8 +98,17 @@ class ChatService:
         context = await self._retrieve_relevant_chunks(query, collection_name="university_library")  # TODO: collection_name should come from session/material metadata
         if context:
             logger.info(f"Retrieved context for question '{query}': {context}")
-            messages.append(ChatMessage(role=MessageRole.SYSTEM, content="Here are some relevant documents from the university library that might help you answer the question:"))  
+            messages.append(ChatMessage(role=MessageRole.SYSTEM, content="Here are some relevant documents from the university library that might help you answer the question:"))
             messages.append(ChatMessage(role=MessageRole.SYSTEM, content=context))
+        else:
+            messages.append(ChatMessage(
+                role=MessageRole.SYSTEM,
+                content=(
+                    "No relevant content was found in the knowledge base for this query. "
+                    "Politely tell the student that the topic is outside the scope of the uploaded "
+                    "course materials and that you cannot answer it. Do not answer from general knowledge."
+                )
+            ))
         logger.info(f"a trecut de retrieve")
         # Add new query
         messages.append(ChatMessage(role=MessageRole.USER, content=query))
@@ -160,4 +171,8 @@ class ChatService:
 
         fused = rrf_fuse(semantic_results, keyword_results, limit=limit * 2)
         reranked = await self.reranker.rerank(query, fused, top_n=limit)
-        return "\n---\n".join(res.chunk.text for res in reranked)
+        above_threshold = [res for res in reranked if res.score >= self.score_threshold]
+        if not above_threshold:
+            logger.info(f"No chunks above threshold {self.score_threshold} for query '{query}'")
+            return ""
+        return "\n---\n".join(res.chunk.text for res in above_threshold)

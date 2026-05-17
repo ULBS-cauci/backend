@@ -220,12 +220,14 @@ def get_chat_service(
     reranker: RerankerInterface = Depends(get_reranker),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> ChatService:
+    score_threshold = CrossEncoderSettings().CROSS_ENCODER_SCORE_THRESHOLD  # type: ignore
     return ChatService(
         vector_db=vector_db,
         embedding_client=embedding_client,
         llm_client=llm_client,
         sparse_encoder=sparse_encoder,
         reranker=reranker,
+        score_threshold=score_threshold,
         db_session=db_session,
     )
 

@@ -55,3 +55,4 @@ class PostgresSettings(_Base):
 
 class CrossEncoderSettings(_Base):
     CROSS_ENCODER_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    CROSS_ENCODER_SCORE_THRESHOLD: float = 0.0
