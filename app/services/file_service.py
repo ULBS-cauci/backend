@@ -1,17 +1,19 @@
-import io
 import uuid
 import asyncio
 from fastapi import UploadFile
 from sqlmodel import select
-from pypdf import PdfReader
 from sqlmodel.ext.asyncio.session import AsyncSession
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from app.core.config import ChunkingSettings
 from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.data_access.interfaces.object_storage import ObjectStorageInterface
-from app.schemas.vector_schemas import DocumentChunk
 from app.schemas.knowledge_schemas import Material, MaterialPublic
+from app.workers.ingestion_worker import (
+    extract_text_from_pdf,
+    split_text_into_chunks,
+    create_document_chunks,
+)
 
 MATERIALS_BUCKET = "materials"
 
@@ -21,20 +23,15 @@ class FileService:
         self,
         vector_db: VectorDBInterface,
         embed_client: EmbeddingInterface,
-        text_splitter: RecursiveCharacterTextSplitter,
         object_storage: ObjectStorageInterface,
         db: AsyncSession,
+        chunking_settings: ChunkingSettings,
     ):
         self.vector_db = vector_db
         self.embed_client = embed_client
-        self.splitter = text_splitter
         self.object_storage = object_storage
         self.db = db
-
-    def _extract_text_from_pdf(self, content: bytes) -> str:
-        pdf = PdfReader(io.BytesIO(content))
-        page_texts = [page.extract_text() or "" for page in pdf.pages]
-        return "\n\n".join(page_texts)
+        self.chunking_settings = chunking_settings
 
     async def upload_and_index(
         self, file: UploadFile, course_id: uuid.UUID, user_id: uuid.UUID
@@ -66,20 +63,21 @@ class FileService:
         return MaterialPublic.model_validate(material)
 
     async def process_and_index_pdf(self, content: bytes, filename: str) -> str:
-        full_text = await asyncio.to_thread(self._extract_text_from_pdf, content)
-        if not full_text.strip():
-            raise ValueError(f"Document {filename} contains no extractable text.")
+        full_text = await asyncio.to_thread(extract_text_from_pdf, content)
 
-        text_chunks = self.splitter.split_text(full_text)
+        text_chunks = await asyncio.to_thread(
+            split_text_into_chunks,
+            full_text,
+            self.chunking_settings.CHUNK_SIZE,
+            self.chunking_settings.CHUNK_OVERLAP,
+        )
+
         if not text_chunks:
             raise ValueError("Could not create text chunks.")
 
-        domain_chunks = [
-            DocumentChunk(
-                id=str(uuid.uuid4()), text=text, metadata={"source": filename}
-            )
-            for text in text_chunks
-        ]
+        domain_chunks = await asyncio.to_thread(
+            create_document_chunks, text_chunks, filename
+        )
 
         vectors = await self.embed_client.embed_batch(text_chunks)
 
@@ -101,7 +99,9 @@ class FileService:
 
         return collection_name
 
-    async def get_materials_by_course(self, course_id: uuid.UUID) -> list[MaterialPublic]:
+    async def get_materials_by_course(
+        self, course_id: uuid.UUID
+    ) -> list[MaterialPublic]:
         result = await self.db.exec(
             select(Material).where(Material.course_id == course_id)
         )
