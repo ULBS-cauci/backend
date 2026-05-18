@@ -1,7 +1,7 @@
 import asyncio
 from typing import List
 
-from fastembed.sparse import BM25
+from fastembed.sparse.bm25 import Bm25
 
 from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
 from app.schemas.vector_schemas import SparseVectorSchema
@@ -9,12 +9,12 @@ from app.schemas.vector_schemas import SparseVectorSchema
 
 class BM25SparseEncoder(SparseEncoderInterface):
     """
-    Concrete implementation of SparseEncoderInterface using fastembed's BM25.
+    Concrete implementation of SparseEncoderInterface using fastembed's Bm25.
     BM25 is CPU-bound and synchronous, so all calls are offloaded to a thread pool.
     """
 
-    def __init__(self) -> None:
-        self._encoder = BM25()
+    def __init__(self, model_name: str = "Qdrant/bm25") -> None:
+        self._encoder = Bm25(model_name)
 
     async def encode_passages(self, texts: List[str]) -> List[SparseVectorSchema]:
         def _run() -> List[SparseVectorSchema]:

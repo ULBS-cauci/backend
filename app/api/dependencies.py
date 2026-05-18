@@ -17,6 +17,7 @@ from app.core.config import (
     MinIOSettings,
     PostgresSettings,
     CrossEncoderSettings,
+    BM25Settings,
 )
 
 from app.data_access.interfaces.embedding import EmbeddingInterface
@@ -190,7 +191,8 @@ async def get_current_user(
 @lru_cache()
 def _get_bm25_sparse_encoder() -> BM25SparseEncoder:
     """Instantiates and caches the BM25 sparse encoder. Downloads vocabulary on first call."""
-    return BM25SparseEncoder()
+    settings = BM25Settings()
+    return BM25SparseEncoder(model_name=settings.BM25_MODEL)
 
 
 def get_sparse_encoder() -> SparseEncoderInterface:
