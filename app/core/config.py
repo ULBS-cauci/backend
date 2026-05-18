@@ -50,3 +50,8 @@ class PostgresSettings(_Base):
     POSTGRES_HOST: str
     POSTGRES_PORT: int
     POSTGRES_SSL: bool = False
+
+
+class ChunkingSettings(_Base):
+    CHUNK_SIZE: int = 1000
+    CHUNK_OVERLAP: int = 100

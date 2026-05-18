@@ -3,6 +3,7 @@ import asyncio
 from fastapi import UploadFile
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.config import ChunkingSettings
 from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.workers.ingestion_worker import (
@@ -10,6 +11,8 @@ from app.workers.ingestion_worker import (
     split_text_into_chunks,
     create_document_chunks
 )
+
+chunking_settings = ChunkingSettings()
 
 class FileService:
     def __init__(
@@ -41,8 +44,8 @@ class FileService:
         text_chunks = await asyncio.to_thread(
             split_text_into_chunks, 
             full_text, 
-            1000, # chunk size
-            100 # chunk overlap
+            chunking_settings.CHUNK_SIZE,
+            chunking_settings.CHUNK_OVERLAP
         )
 
         if not text_chunks:
