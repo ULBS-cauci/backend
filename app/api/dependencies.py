@@ -158,8 +158,12 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
-def get_course_service(db: AsyncSession = Depends(get_db_session)):
-    return CourseService(db=db)
+def get_course_service(
+    db: AsyncSession = Depends(get_db_session),
+    object_storage: ObjectStorageInterface = Depends(get_object_storage_client),
+    vector_db: VectorDBInterface = Depends(get_vector_db_client),
+) -> CourseService:
+    return CourseService(db=db, object_storage=object_storage, vector_db=vector_db)
 
 
 async def get_current_user(

@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from app.api.dependencies import get_course_service, get_file_service
 from app.services.course_service import CourseService
 from app.services.file_service import FileService
@@ -47,7 +47,10 @@ async def update_course(
     course_data: CourseUpdate,
     course_service: CourseService = Depends(get_course_service),
 ):
-    return await course_service.update_course(course_id, course_data)
+    result = await course_service.update_course(course_id, course_data)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Course not found")
+    return result
 
 
 @router.delete("/{course_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -55,4 +58,5 @@ async def delete_course(
     course_id: uuid.UUID,
     course_service: CourseService = Depends(get_course_service),
 ):
-    await course_service.delete_course(course_id)
+    if not await course_service.delete_course(course_id):
+        raise HTTPException(status_code=404, detail="Course not found")

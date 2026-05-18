@@ -1,14 +1,25 @@
 import uuid
 from sqlalchemy import select
 from sqlmodel.ext.asyncio.session import AsyncSession
+from app.data_access.interfaces.object_storage import ObjectStorageInterface
+from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.schemas.course_schemas import Course, CourseCreate, CourseUpdate, CourseDisplay
 from app.schemas.knowledge_schemas import Material
 from app.schemas.user_schemas import User
 
+MATERIALS_BUCKET = "materials"
+
 
 class CourseService:
-    def __init__(self, db: AsyncSession):
+    def __init__(
+        self,
+        db: AsyncSession,
+        object_storage: ObjectStorageInterface,
+        vector_db: VectorDBInterface,
+    ):
         self.db = db
+        self.object_storage = object_storage
+        self.vector_db = vector_db
 
     async def get_courses_by_teacher(
         self, teacher_id: uuid.UUID
@@ -18,7 +29,7 @@ class CourseService:
             .outerjoin(User, Course.held_by == User.id)
             .where(Course.held_by == teacher_id)
         )
-        result = await self.db.exec(stmt)
+        result = await self.db.execute(stmt)
         rows = result.all()
         output = []
         for course, user in rows:
@@ -30,7 +41,7 @@ class CourseService:
 
     async def get_all_courses(self) -> list[CourseDisplay]:
         stmt = select(Course, User).outerjoin(User, Course.held_by == User.id)
-        result = await self.db.exec(stmt)
+        result = await self.db.execute(stmt)
         rows = result.all()
         output = []
         for course, user in rows:
@@ -39,12 +50,6 @@ class CourseService:
                 display.teacher_name = f"{user.first_name} {user.last_name}"
             output.append(display)
         return output
-
-    async def get_materials_by_course(self, course_id: uuid.UUID) -> list[Material]:
-        result = await self.db.exec(
-            select(Material).where(Material.course_id == course_id)
-        )
-        return result.all()
 
     async def create_course(
         self, course_data: CourseCreate, teacher_id: uuid.UUID
@@ -57,7 +62,7 @@ class CourseService:
 
     async def update_course(
         self, course_id: uuid.UUID, course_data: CourseUpdate
-    ) -> Course | None:
+    ) -> CourseDisplay | None:
         result = await self.db.execute(select(Course).where(Course.id == course_id))
         course = result.scalar_one_or_none()
         if not course:
@@ -67,11 +72,31 @@ class CourseService:
         self.db.add(course)
         await self.db.commit()
         await self.db.refresh(course)
-        return course
+        stmt = (
+            select(Course, User)
+            .outerjoin(User, Course.held_by == User.id)
+            .where(Course.id == course_id)
+        )
+        result = await self.db.execute(stmt)
+        course, user = result.one()
+        display = CourseDisplay.model_validate(course)
+        if user:
+            display.teacher_name = f"{user.first_name} {user.last_name}"
+        return display
 
-    async def delete_course(self, course_id: uuid.UUID) -> None:
-        result = await self.db.exec(select(Course).where(Course.id == course_id))
-        course = result.first()
-        if course:
-            await self.db.delete(course)
-            await self.db.commit()
+    async def delete_course(self, course_id: uuid.UUID) -> bool:
+        result = await self.db.execute(select(Material).where(Material.course_id == course_id))
+        materials = result.scalars().all()
+        for material in materials:
+            if material.object_storage_key:
+                await self.object_storage.delete_file(MATERIALS_BUCKET, material.object_storage_key)
+            if material.vector_namespace and material.file_name:
+                await self.vector_db.delete_chunks_by_source(material.vector_namespace, material.file_name)
+            await self.db.delete(material)
+        await self.db.flush()
+        course = await self.db.get(Course, course_id)
+        if not course:
+            return False
+        await self.db.delete(course)
+        await self.db.commit()
+        return True

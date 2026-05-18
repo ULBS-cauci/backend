@@ -41,26 +41,34 @@ class FileService:
             raise ValueError("Only PDF files are accepted.")
 
         content = await file.read()
-
         object_key = f"{course_id}/{uuid.uuid4()}_{filename}"
-        await self.object_storage.upload_file(
-            MATERIALS_BUCKET, object_key, content, "application/pdf"
-        )
 
         collection_name = await self.process_and_index_pdf(content, filename)
 
-        material = Material(
-            course_id=course_id,
-            file_name=filename,
-            file_type="pdf",
-            vector_namespace=collection_name,
-            uploaded_by=user_id,
-            object_storage_key=object_key,
-        )
-        self.db.add(material)
-        await self.db.commit()
-        await self.db.refresh(material)
-        return MaterialPublic.model_validate(material)
+        uploaded = False
+        try:
+            await self.object_storage.upload_file(
+                MATERIALS_BUCKET, object_key, content, "application/pdf"
+            )
+            uploaded = True
+
+            material = Material(
+                course_id=course_id,
+                file_name=filename,
+                file_type="pdf",
+                vector_namespace=collection_name,
+                uploaded_by=user_id,
+                object_storage_key=object_key,
+            )
+            self.db.add(material)
+            await self.db.commit()
+            await self.db.refresh(material)
+            return MaterialPublic.model_validate(material)
+        except Exception:
+            await self.vector_db.delete_chunks_by_source(collection_name, filename)
+            if uploaded:
+                await self.object_storage.delete_file(MATERIALS_BUCKET, object_key)
+            raise
 
     async def process_and_index_pdf(self, content: bytes, filename: str) -> str:
         full_text = await asyncio.to_thread(extract_text_from_pdf, content)
