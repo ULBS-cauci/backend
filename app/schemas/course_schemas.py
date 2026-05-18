@@ -39,8 +39,9 @@ class CourseUpdate(SQLModel):
 # ---------------------------------------------------------
 # 4. THE OUTPUT DTO
 # ---------------------------------------------------------
-class CoursePublic(CourseBase):
+class CourseDisplay(CourseBase):
     id: uuid.UUID
     held_by: Optional[uuid.UUID]
     created_at: datetime
     updated_at: datetime
+    teacher_name: Optional[str] = None
