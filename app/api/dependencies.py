@@ -12,6 +12,7 @@ from app.core.config import (
     OpenAISettings,
     MinIOSettings,
     PostgresSettings,
+    ChunkingSettings,
 )
 
 from app.data_access.interfaces.embedding import EmbeddingInterface
@@ -102,6 +103,12 @@ def _get_minio_client() -> MinIOClient:
         secret_key=settings.MINIO_PASSWORD,
         use_ssl=settings.MINIO_USE_SSL,
     )
+
+
+@lru_cache()
+def get_chunking_settings() -> ChunkingSettings:
+    """Caches the chunking settings per application lifecycle."""
+    return ChunkingSettings()  # type: ignore
 
 
 def get_object_storage_client(
@@ -199,9 +206,11 @@ def get_file_service(
     vector_db: VectorDBInterface = Depends(get_vector_db_client),
     embed_client: EmbeddingInterface = Depends(get_embedding_client),
     db: AsyncSession = Depends(get_db_session),
+    chunking_settings: ChunkingSettings = Depends(get_chunking_settings),
 ) -> FileService:
     return FileService(
         vector_db=vector_db, 
         embed_client=embed_client, 
-        db=db
+        db=db,
+        chunking_settings=chunking_settings
     )
