@@ -203,9 +203,14 @@ def get_chat_service(
 def get_file_service(
     vector_db: VectorDBInterface = Depends(get_vector_db_client),
     embed_client: EmbeddingInterface = Depends(get_embedding_client),
+    object_storage: ObjectStorageInterface = Depends(get_object_storage_client),
     db: AsyncSession = Depends(get_db_session),
 ) -> FileService:
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
     return FileService(
-        vector_db=vector_db, embed_client=embed_client, text_splitter=splitter, db=db
+        vector_db=vector_db,
+        embed_client=embed_client,
+        text_splitter=splitter,
+        object_storage=object_storage,
+        db=db,
     )
