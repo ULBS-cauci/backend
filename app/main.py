@@ -11,12 +11,12 @@ logger = logging.getLogger("uvicorn.error")
 from app.schemas.course_schemas import Course
 from app.schemas.user_schemas import User
 from app.schemas.knowledge_schemas import Material
-from app.schemas.chat_schemas import ChatSession, Message, Attachment, SharedLink
+from app.schemas.chat_schemas import Conversation, Message, Attachment, SharedLink
 from app.schemas.admin_schemas import SystemPrompt, LlmTip
 
 from app.api.dependencies import _get_async_engine
 
-from app.api.routers import chat, files
+from app.api.routers import files
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

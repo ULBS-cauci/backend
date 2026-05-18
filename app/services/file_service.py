@@ -3,11 +3,12 @@ import asyncio
 from fastapi import UploadFile
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.config import ChunkingSettings
 from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.data_access.interfaces.embedding import EmbeddingInterface
-from app.data_access.interfaces.text_splitter import TextSplitterInterface
 from app.workers.ingestion_worker import (
     extract_text_from_pdf,
+    split_text_into_chunks,
     create_document_chunks
 )
 
@@ -16,13 +17,13 @@ class FileService:
         self, 
         vector_db: VectorDBInterface, 
         embed_client: EmbeddingInterface,
-        text_splitter: TextSplitterInterface,
-        db: AsyncSession  
+        db: AsyncSession,
+        chunking_settings: ChunkingSettings
     ):
         self.vector_db = vector_db
         self.embed_client = embed_client
-        self.text_splitter = text_splitter
-        self.db = db 
+        self.db = db
+        self.chunking_settings = chunking_settings 
 
     async def upload_and_index(self, file: UploadFile, course_id: uuid.UUID, user_id: uuid.UUID) -> str: 
         filename = file.filename or "unnamed_document.pdf"
@@ -40,10 +41,11 @@ class FileService:
     async def process_and_index_pdf(self, content: bytes, filename: str) -> str:
         full_text = await asyncio.to_thread(extract_text_from_pdf, content)
         
-        # Use injected text splitter with configured chunk size/overlap
         text_chunks = await asyncio.to_thread(
-            self.text_splitter.split_text,
-            full_text
+            split_text_into_chunks, 
+            full_text, 
+            self.chunking_settings.CHUNK_SIZE,
+            self.chunking_settings.CHUNK_OVERLAP
         )
 
         if not text_chunks:
@@ -56,9 +58,12 @@ class FileService:
         )
 
         vectors = await self.embed_client.embed_batch(text_chunks)
+
+        if not vectors:
+            raise ValueError("Could not create embeddings.")
         
         vector_size = len(vectors[0])
-        collection_name = f"university_library_{vector_size}"
+        collection_name = "university_library"
         
         await self.vector_db.create_collection(collection_name, vector_size)
         await self.vector_db.upsert_chunks(collection_name, domain_chunks, vectors)
