@@ -113,6 +113,16 @@ def get_chunking_settings() -> ChunkingSettings:
     return ChunkingSettings()  # type: ignore
 
 
+def get_text_splitter(
+    chunking_settings: ChunkingSettings = Depends(get_chunking_settings),
+) -> TextSplitterInterface:
+    """Creates a text splitter with configured chunk size and overlap."""
+    return LangChainRecursiveSplitterClient(
+        chunk_size=chunking_settings.CHUNK_SIZE,
+        chunk_overlap=chunking_settings.CHUNK_OVERLAP
+    )
+
+
 def get_object_storage_client(
     app: AppSettings = Depends(get_app_settings),
 ) -> ObjectStorageInterface:
@@ -207,12 +217,12 @@ def get_chat_service(
 def get_file_service(
     vector_db: VectorDBInterface = Depends(get_vector_db_client),
     embed_client: EmbeddingInterface = Depends(get_embedding_client),
+    text_splitter: TextSplitterInterface = Depends(get_text_splitter),
     db: AsyncSession = Depends(get_db_session),
-    chunking_settings: ChunkingSettings = Depends(get_chunking_settings),
 ) -> FileService:
     return FileService(
         vector_db=vector_db, 
         embed_client=embed_client, 
-        db=db,
-        chunking_settings=chunking_settings
+        text_splitter=text_splitter,
+        db=db
     )
