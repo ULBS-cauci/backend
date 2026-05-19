@@ -60,3 +60,8 @@ class CrossEncoderSettings(_Base):
 
 class BM25Settings(_Base):
     BM25_MODEL: str = "Qdrant/bm25"
+      
+      
+class ChunkingSettings(_Base):
+    CHUNK_SIZE: int = 1000
+    CHUNK_OVERLAP: int = 100

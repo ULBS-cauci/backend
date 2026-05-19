@@ -18,6 +18,7 @@ from app.core.config import (
     PostgresSettings,
     CrossEncoderSettings,
     BM25Settings,
+    ChunkingSettings,
 )
 
 from app.data_access.interfaces.embedding import EmbeddingInterface
@@ -36,7 +37,6 @@ from sqlalchemy.engine import URL
 from typing import AsyncGenerator
 
 from app.services.file_service import FileService
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 @lru_cache()
@@ -109,6 +109,12 @@ def _get_minio_client() -> MinIOClient:
         secret_key=settings.MINIO_PASSWORD,
         use_ssl=settings.MINIO_USE_SSL,
     )
+
+
+@lru_cache()
+def get_chunking_settings() -> ChunkingSettings:
+    """Caches the chunking settings per application lifecycle."""
+    return ChunkingSettings()  # type: ignore
 
 
 def get_object_storage_client(
@@ -245,12 +251,13 @@ def get_file_service(
     embed_client: EmbeddingInterface = Depends(get_embedding_client),
     sparse_encoder: SparseEncoderInterface = Depends(get_sparse_encoder),
     db: AsyncSession = Depends(get_db_session),
+    chunking_settings: ChunkingSettings = Depends(get_chunking_settings),
 ) -> FileService:
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
     return FileService(
         vector_db=vector_db,
         embed_client=embed_client,
         sparse_encoder=sparse_encoder,
         text_splitter=splitter,
         db=db,
+        chunking_settings=chunking_settings,
     )
