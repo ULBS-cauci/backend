@@ -1,5 +1,4 @@
 services:
-
   # ─── Qdrant — Vector Database ────────────────────────────────────────────────
   qdrant:
     image: qdrant/qdrant:latest
@@ -20,11 +19,11 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     ports:
-      - "9000:9000"   # S3 API  →  set MINIO_ENDPOINT=http://localhost:9000 in .env
-      - "9001:9001"   # Web Console  →  http://localhost:9001
+      - "9000:9000" # S3 API  →  set MINIO_ENDPOINT=http://localhost:9000 in .env
+      - "9001:9001" # Web Console  →  http://localhost:9001
     environment:
-      - MINIO_ROOT_USER=${MINIO_USER}        # must match MINIO_USER in .env
-      - MINIO_ROOT_PASSWORD=${MINIO_PASSWORD}    # must match MINIO_PASSWORD in .env
+      - MINIO_ROOT_USER=${MINIO_USER} # must match MINIO_USER in .env
+      - MINIO_ROOT_PASSWORD=${MINIO_PASSWORD} # must match MINIO_PASSWORD in .env
     volumes:
       - ./data/minio_data:/data
 
@@ -41,4 +40,3 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - ./data/postgres_data:/var/lib/postgresql/data
-

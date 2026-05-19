@@ -60,6 +60,13 @@ class VectorDBInterface(ABC):
         pass
 
     @abstractmethod
+    async def delete_chunks_by_source(self, collection_name: str, source: str) -> None:
+        """
+        Deletes all chunks whose metadata.source matches the given source string.
+        """
+        pass
+
+    @abstractmethod
     async def upsert_chunks(self, collection_name: str, chunks: List[DocumentChunk], vectors: List[List[float]]) -> bool:
         """
         Uploads document chunks and their corresponding embeddings into the database.
