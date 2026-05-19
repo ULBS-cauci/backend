@@ -9,13 +9,16 @@ from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.data_access.interfaces.object_storage import ObjectStorageInterface
 from app.schemas.knowledge_schemas import Material, MaterialPublic
+from app.main import MATERIALS_BUCKET
 from app.workers.ingestion_worker import (
     extract_text_from_pdf,
     split_text_into_chunks,
     create_document_chunks,
 )
 
-MATERIALS_BUCKET = "materials"
+
+def build_object_key(course_id: uuid.UUID, filename: str) -> str:
+    return f"{course_id}/{uuid.uuid4()}_{filename}"
 
 
 class FileService:
@@ -41,7 +44,7 @@ class FileService:
             raise ValueError("Only PDF files are accepted.")
 
         content = await file.read()
-        object_key = f"{course_id}/{uuid.uuid4()}_{filename}"
+        object_key = build_object_key(course_id, filename)
 
         collection_name = await self.process_and_index_pdf(content, filename)
 

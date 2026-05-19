@@ -6,7 +6,7 @@ from sqlmodel import SQLModel
 
 logger = logging.getLogger("uvicorn.error")
 
-# Important: We must import all SQLModel schemas here so that SQLModel.metadata is fully populated 
+# Important: We must import all SQLModel schemas here so that SQLModel.metadata is fully populated
 # before we try to create the tables natively.
 from app.schemas.course_schemas import Course
 from app.schemas.user_schemas import User
@@ -17,6 +17,9 @@ from app.schemas.admin_schemas import SystemPrompt, LlmTip
 from app.api.dependencies import _get_async_engine, _get_minio_client
 
 from app.api.routers import files
+
+MATERIALS_BUCKET = "materials"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -40,6 +43,7 @@ async def lifespan(app: FastAPI):
         logger.info("MinIO client closed.")
         await engine.dispose()
 
+
 # Import your routers here as you build them
 # from app.api.routers import sessions, auth, files, admin
 from app.api.routers import sessions
@@ -49,7 +53,7 @@ app = FastAPI(
     title="AI Tutor API",
     description="Backend API for the RAG-based AI Tutor system.",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -67,6 +71,7 @@ app.include_router(sessions.router, prefix="/api/v1/sessions", tags=["Sessions"]
 async def root():
     """Health check endpoint."""
     return {"message": "AI Tutor API is running. Go to /docs for Swagger UI."}
+
 
 app.include_router(files.router, prefix="/api/v1/files", tags=["Files"])
 app.include_router(course.router, prefix="/api/v1/courses", tags=["Courses"])

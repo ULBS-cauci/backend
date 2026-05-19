@@ -6,8 +6,7 @@ from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.schemas.course_schemas import Course, CourseCreate, CourseUpdate, CourseDisplay
 from app.schemas.knowledge_schemas import Material
 from app.schemas.user_schemas import User
-
-MATERIALS_BUCKET = "materials"
+from app.main import MATERIALS_BUCKET
 
 
 class CourseService:
@@ -85,13 +84,19 @@ class CourseService:
         return display
 
     async def delete_course(self, course_id: uuid.UUID) -> bool:
-        result = await self.db.execute(select(Material).where(Material.course_id == course_id))
+        result = await self.db.execute(
+            select(Material).where(Material.course_id == course_id)
+        )
         materials = result.scalars().all()
         for material in materials:
             if material.object_storage_key:
-                await self.object_storage.delete_file(MATERIALS_BUCKET, material.object_storage_key)
+                await self.object_storage.delete_file(
+                    MATERIALS_BUCKET, material.object_storage_key
+                )
             if material.vector_namespace and material.file_name:
-                await self.vector_db.delete_chunks_by_source(material.vector_namespace, material.file_name)
+                await self.vector_db.delete_chunks_by_source(
+                    material.vector_namespace, material.file_name
+                )
             await self.db.delete(material)
         await self.db.flush()
         course = await self.db.get(Course, course_id)
