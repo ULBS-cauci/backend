@@ -3,7 +3,7 @@ from typing import List, Optional
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
     PointStruct, VectorParams, Distance,
-    SparseVectorParams, SparseIndexParams, SparseVector,
+    SparseVectorParams, SparseIndexParams, SparseVector, ScoredPoint,
 )
 
 from app.data_access.interfaces.vector_db import VectorDBInterface
@@ -16,6 +16,13 @@ class QdrantClient(VectorDBInterface):
 
     async def create_collection(self, collection_name: str, vector_size: int, sparse: bool = False) -> bool:
         if await self.client.collection_exists(collection_name=collection_name):
+            info = await self.client.get_collection(collection_name)
+            vectors_cfg = info.config.params.vectors
+            if not isinstance(vectors_cfg, dict) or "dense" not in vectors_cfg:
+                raise ValueError(
+                    f"Collection '{collection_name}' exists with a legacy unnamed-vector schema. "
+                    "Drop it and re-upload all documents to migrate to the named-vector schema."
+                )
             return False
 
         if sparse:
@@ -29,7 +36,7 @@ class QdrantClient(VectorDBInterface):
         else:
             await self.client.create_collection(
                 collection_name=collection_name,
-                vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
+                vectors_config={"dense": VectorParams(size=vector_size, distance=Distance.COSINE)},
             )
         return True
 
@@ -40,7 +47,7 @@ class QdrantClient(VectorDBInterface):
         await self.client.delete_collection(collection_name=collection_name)
         return True
 
-    def _map_points_to_results(self, points) -> List[SearchResult]:
+    def _map_points_to_results(self, points: List[ScoredPoint]) -> List[SearchResult]:
         results = []
         for point in points:
             payload = point.payload or {}

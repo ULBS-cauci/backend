@@ -201,6 +201,12 @@ def get_sparse_encoder() -> SparseEncoderInterface:
 
 
 @lru_cache()
+def get_cross_encoder_settings() -> CrossEncoderSettings:
+    """Reads and caches CrossEncoderSettings once per application lifecycle."""
+    return CrossEncoderSettings()  # type: ignore
+
+
+@lru_cache()
 def _get_cross_encoder_reranker() -> CrossEncoderReranker:
     """Instantiates and caches the cross-encoder reranker. Downloads model on first call."""
     settings = CrossEncoderSettings()  # type: ignore
@@ -221,15 +227,15 @@ def get_chat_service(
     sparse_encoder: SparseEncoderInterface = Depends(get_sparse_encoder),
     reranker: RerankerInterface = Depends(get_reranker),
     db_session: AsyncSession = Depends(get_db_session),
+    cross_encoder_settings: CrossEncoderSettings = Depends(get_cross_encoder_settings),
 ) -> ChatService:
-    score_threshold = CrossEncoderSettings().CROSS_ENCODER_SCORE_THRESHOLD  # type: ignore
     return ChatService(
         vector_db=vector_db,
         embedding_client=embedding_client,
         llm_client=llm_client,
         sparse_encoder=sparse_encoder,
         reranker=reranker,
-        score_threshold=score_threshold,
+        score_threshold=cross_encoder_settings.CROSS_ENCODER_SCORE_THRESHOLD,
         db_session=db_session,
     )
 

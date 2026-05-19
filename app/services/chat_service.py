@@ -219,7 +219,17 @@ class ChatService:
             self.vector_db.search_sparse(
                 collection_name, sparse_query, limit=limit * 4
             ),
+            return_exceptions=True,
         )
+
+        if isinstance(semantic_results, Exception):
+            raise semantic_results
+        if isinstance(keyword_results, Exception):
+            logger.warning(
+                f"Sparse search failed for '{collection_name}' — falling back to dense-only. "
+                f"Reindex with sparse=True to restore hybrid retrieval. Error: {keyword_results}"
+            )
+            keyword_results = []
 
         fused = rrf_fuse(semantic_results, keyword_results, limit=limit * 2)
         reranked = await self.reranker.rerank(query, fused, top_n=limit)

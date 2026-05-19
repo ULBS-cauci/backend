@@ -18,4 +18,4 @@ class DocumentChunk(BaseModel):
 
 class SearchResult(BaseModel):
     chunk: DocumentChunk
-    score: float  # Standardized score (0.0 to 1.0)
+    score: float  # Relevance/ranking score; not guaranteed to be normalized and may vary by scoring method (e.g. similarity, BM25, RRF, reranker score)
