@@ -209,7 +209,7 @@ def get_cross_encoder_settings() -> CrossEncoderSettings:
 @lru_cache()
 def _get_cross_encoder_reranker() -> CrossEncoderReranker:
     """Instantiates and caches the cross-encoder reranker. Downloads model on first call."""
-    settings = CrossEncoderSettings()  # type: ignore
+    settings = get_cross_encoder_settings()
     return CrossEncoderReranker(model_name=settings.CROSS_ENCODER_MODEL)
 
 
