@@ -19,6 +19,7 @@ from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
 from app.data_access.interfaces.reranker import RerankerInterface
 
 from fastapi import HTTPException, status
+from app.core.config import QDRANT_MATERIALS_COLLECTION
 
 TUTOR_SYSTEM_PROMPT = (
     "You are a university tutor for the AI Tutor platform. "
@@ -156,7 +157,7 @@ class ChatService:
             messages.append(ChatMessage(role=role, content=msg.content))
 
         context = await self._retrieve_relevant_chunks(
-            search_query, collection_name="university_library"
+            search_query, collection_name=QDRANT_MATERIALS_COLLECTION
         )  # TODO: collection_name should come from session/material metadata
         if context:
             logger.info(f"Retrieved context for query '{query}': {context}")

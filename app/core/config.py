@@ -65,3 +65,7 @@ class BM25Settings(_Base):
 class ChunkingSettings(_Base):
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 100
+
+
+MINIO_MATERIALS_BUCKET = "materials"
+QDRANT_MATERIALS_COLLECTION = "university_library"

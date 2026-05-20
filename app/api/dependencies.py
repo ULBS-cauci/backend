@@ -28,9 +28,9 @@ from app.data_access.interfaces.llm import LLMInterface
 from app.data_access.clients.openai_client import OpenAILLMClient
 
 from app.services.chat_service import ChatService
+from app.services.course_service import CourseService
 from app.data_access.interfaces.object_storage import ObjectStorageInterface
 from app.data_access.clients.minio_client import MinIOClient
-
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.engine import URL
@@ -164,6 +164,14 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+def get_course_service(
+    db: AsyncSession = Depends(get_db_session),
+    object_storage: ObjectStorageInterface = Depends(get_object_storage_client),
+    vector_db: VectorDBInterface = Depends(get_vector_db_client),
+) -> CourseService:
+    return CourseService(db=db, object_storage=object_storage, vector_db=vector_db)
+
+
 async def get_current_user(
     db: AsyncSession = Depends(get_db_session),
     settings: AppSettings = Depends(get_app_settings),
@@ -249,6 +257,7 @@ def get_chat_service(
 def get_file_service(
     vector_db: VectorDBInterface = Depends(get_vector_db_client),
     embed_client: EmbeddingInterface = Depends(get_embedding_client),
+    object_storage: ObjectStorageInterface = Depends(get_object_storage_client),
     sparse_encoder: SparseEncoderInterface = Depends(get_sparse_encoder),
     db: AsyncSession = Depends(get_db_session),
     chunking_settings: ChunkingSettings = Depends(get_chunking_settings),
@@ -256,8 +265,8 @@ def get_file_service(
     return FileService(
         vector_db=vector_db,
         embed_client=embed_client,
+        object_storage=object_storage,
         sparse_encoder=sparse_encoder,
-        text_splitter=splitter,
         db=db,
         chunking_settings=chunking_settings,
     )

@@ -2,7 +2,7 @@ import uuid
 from typing import List, Optional
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
-    PointStruct, VectorParams, Distance,
+    PointStruct, VectorParams, Distance, Filter, FieldCondition, MatchValue, FilterSelector,
     SparseVectorParams, SparseIndexParams, SparseVector, ScoredPoint,
 )
 
@@ -91,6 +91,18 @@ class QdrantClient(VectorDBInterface):
             with_payload=True,
         )
         return self._map_points_to_results(response.points)
+
+    async def delete_chunks_by_source(self, collection_name: str, source: str) -> None:
+        if not await self.client.collection_exists(collection_name):
+            return
+        await self.client.delete(
+            collection_name=collection_name,
+            points_selector=FilterSelector(
+                filter=Filter(
+                    must=[FieldCondition(key="metadata.source", match=MatchValue(value=source))]
+                )
+            ),
+        )
 
     async def upsert_chunks(
         self,

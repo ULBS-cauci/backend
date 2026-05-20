@@ -88,6 +88,24 @@ class ObjectStorageInterface(ABC):
         pass
 
     @abstractmethod
+    async def generate_presigned_url(
+        self,
+        bucket_name: str,
+        object_key: str,
+        expiry_seconds: int = 3600,
+    ) -> str:
+        """
+        Generates a time-limited pre-signed URL for direct browser access to an object.
+
+        Args:
+            expiry_seconds: How long the URL remains valid. Defaults to 1 hour.
+
+        Returns:
+            A URL string the browser can use to fetch the object directly.
+        """
+        pass
+
+    @abstractmethod
     async def list_files(
         self,
         bucket_name: str,
