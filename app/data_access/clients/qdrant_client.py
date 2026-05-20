@@ -1,7 +1,7 @@
 import uuid
 from typing import List
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.models import Optional, PointStruct, VectorParams, Distance
+from qdrant_client.models import Optional, PointStruct, VectorParams, Distance, Filter, FieldCondition, MatchValue, FilterSelector
 
 from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.schemas.vector_schemas import DocumentChunk, SearchResult
@@ -49,6 +49,18 @@ class QdrantClient(VectorDBInterface):
             domain_results.append(SearchResult(chunk=chunk, score=point.score))
 
         return domain_results
+
+    async def delete_chunks_by_source(self, collection_name: str, source: str) -> None:
+        if not await self.client.collection_exists(collection_name):
+            return
+        await self.client.delete(
+            collection_name=collection_name,
+            points_selector=FilterSelector(
+                filter=Filter(
+                    must=[FieldCondition(key="metadata.source", match=MatchValue(value=source))]
+                )
+            ),
+        )
 
     async def upsert_chunks(self, collection_name: str, chunks: List[DocumentChunk], vectors: List[List[float]]) -> bool:
         if len(chunks) != len(vectors):
