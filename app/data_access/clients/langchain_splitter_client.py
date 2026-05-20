@@ -7,7 +7,7 @@ class LangChainRecursiveSplitterClient(TextSplitterInterface):
     
     This class encapsulates the logic for splitting text into chunks using LangChain's splitter."""
     
-    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 100):
+    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 100) -> None:
         self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap
