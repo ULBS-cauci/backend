@@ -28,7 +28,6 @@ class FileService:
         object_storage: ObjectStorageInterface,
         db: AsyncSession,
         text_splitter: TextSplitterInterface,
-        db: AsyncSession
     ):
         self.vector_db = vector_db
         self.embed_client = embed_client
@@ -74,12 +73,13 @@ class FileService:
             raise
 
     async def process_and_index_pdf(self, content: bytes, filename: str) -> str:
-        full_text = await asyncio.to_thread(extract_text_from_pdf, content)
+        try:
+            full_text = await asyncio.to_thread(extract_text_from_pdf, content)
+        except ValueError as exc:
+            raise ValueError(
+                f"Document {filename} contains no extractable text."
+            ) from exc
 
-        
-        if not full_text.strip():
-            raise ValueError(f"Document {filename} contains no extractable text.")
-        
         # Use injected text splitter with configured chunk size/overlap
         text_chunks = await asyncio.to_thread(
             self.text_splitter.split_text,
