@@ -23,7 +23,7 @@ When a user submits a prompt, the system executes the following linear flow orch
 
   - Reciprocal Rank Fusion (RRF): The results from both searches—which use different scoring scales—are merged using the RRF algorithm. This normalizes the scores to create a single, prioritized list of the most relevant chunks.
 
-  - (Optional) Cross-Encoder Re-ranking: To ensure maximum precision, the top-scoring fused results are passed through a Re-ranker model that evaluates the direct relationship between the query and each chunk, filtering out low-relevance noise.
+  - Cross-Encoder Re-ranking: The top-scoring fused results are passed through a `CrossEncoderReranker` model that evaluates the direct relationship between the query and each chunk, filtering out low-relevance noise. The model runs in-process (sentence-transformers, CPU) and is pre-warmed at startup.
 
 - **D. Prompt Assembly (Dynamic Context):** The retrieved chunks are evaluated. If no relevant chunks are found, the system triggers the **"I don't know" fallback**, preventing hallucinations. If relevant chunks exist, a `ContextBuilder` formats the chunks and the requested output type into a final system prompt.
   > In the future, define strict retrieval thresholds and fallback tiers:
@@ -89,6 +89,15 @@ app/
 
 All external systems are hidden behind Abstract Base Classes in `data_access/interfaces/`. Services depend only on these contracts — never on concrete clients.
 
+| Interface | File | Concrete client |
+|---|---|---|
+| `VectorDBInterface` | `vector_db.py` | `QdrantClient` |
+| `EmbeddingInterface` | `embedding.py` | `OllamaEmbeddingClient` |
+| `LLMInterface` | `llm.py` | `OpenAILLMClient` |
+| `ObjectStorageInterface` | `object_storage.py` | `MinIOClient` |
+| `SparseEncoderInterface` | `sparse_encoder.py` | `BM25SparseEncoder` |
+| `RerankerInterface` | `reranker.py` | `CrossEncoderReranker` |
+
 **Exception — PostgreSQL:** The relational database is the sole external system used without a contract interface. SQLModel and asyncpg are used directly, with the async session injected per-request via `Depends()` in `dependencies.py`.
 
 ### 7. Core Domain Schemas
@@ -139,29 +148,34 @@ Code Example:
 # 1. Define the Contract (data_access/interfaces/vector_db.py)
 from abc import ABC, abstractmethod
 
-class IVectorDB(ABC):
+class VectorDBInterface(ABC):
     @abstractmethod
-    async def search(self, query_vector: list[float]) -> list[str]:
+    async def search(self, collection_name: str, query_vector: list[float], limit: int = 5) -> list[SearchResult]:
         pass
 
 # 2. Concrete Implementation (data_access/clients/qdrant_client.py)
-class QdrantRepository(IVectorDB):
-    async def search(self, query_vector: list[float]) -> list[str]:
+class QdrantClient(VectorDBInterface):
+    async def search(self, collection_name, query_vector, limit=5) -> list[SearchResult]:
         # Qdrant specific SDK logic goes here
-        return ["chunk 1", "chunk 2"]
+        ...
 
-# 3. Inject it (api/dependencies.py)
+# 3. Inject it (api/dependencies.py) — factory cached with @lru_cache
+from functools import lru_cache
 from fastapi import Depends
 
-def get_vector_db() -> IVectorDB:
-    # We yield the concrete class, but FastAPI treats it as the Interface
-    return QdrantRepository()
+@lru_cache()
+def _get_qdrant_client() -> QdrantClient:
+    return QdrantClient(endpoint=..., api_key=...)
+
+def get_vector_db_client(app: AppSettings = Depends(get_app_settings)) -> VectorDBInterface:
+    if app.VECTOR_DB_CLIENT_TYPE == "qdrant":
+        return _get_qdrant_client()
+    raise ValueError(...)
 
 # 4. Use it decoupled (services/chat_service.py)
 class ChatService:
-    # Notice: The service knows NOTHING about Qdrant.
-    # It only knows it has an object that can .search()
-    def __init__(self, vector_db: IVectorDB):
+    # The service knows NOTHING about Qdrant — only the interface contract.
+    def __init__(self, vector_db: VectorDBInterface):
         self.vector_db = vector_db
 ```
 

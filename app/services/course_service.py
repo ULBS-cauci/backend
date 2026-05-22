@@ -6,7 +6,7 @@ from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.schemas.course_schemas import Course, CourseCreate, CourseUpdate, CourseDisplay
 from app.schemas.knowledge_schemas import Material
 from app.schemas.user_schemas import User
-from app.main import MATERIALS_BUCKET
+from app.core.config import MINIO_MATERIALS_BUCKET
 
 
 class CourseService:
@@ -91,7 +91,7 @@ class CourseService:
         for material in materials:
             if material.object_storage_key:
                 await self.object_storage.delete_file(
-                    MATERIALS_BUCKET, material.object_storage_key
+                    MINIO_MATERIALS_BUCKET, material.object_storage_key
                 )
             if material.vector_namespace and material.file_name:
                 await self.vector_db.delete_chunks_by_source(

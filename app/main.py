@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 import logging
@@ -14,11 +15,10 @@ from app.schemas.knowledge_schemas import Material
 from app.schemas.chat_schemas import Conversation, Message, Attachment, SharedLink
 from app.schemas.admin_schemas import SystemPrompt, LlmTip
 
-from app.api.dependencies import _get_async_engine, _get_minio_client
+from app.api.dependencies import _get_async_engine, _get_bgem3_sparse_encoder, _get_cross_encoder_reranker, _get_minio_client
 
 from app.api.routers import files
-
-MATERIALS_BUCKET = "materials"
+from app.core.config import MINIO_MATERIALS_BUCKET
 
 
 @asynccontextmanager
@@ -31,9 +31,17 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(SQLModel.metadata.create_all)
     logger.info("Database tables initialized successfully.")
 
+    logger.info("Pre-warming BGE-M3 sparse encoder (downloads model if not cached, ~570MB)...")
+    await asyncio.to_thread(_get_bgem3_sparse_encoder)
+    logger.info("BGE-M3 sparse encoder ready.")
+
+    logger.info("Pre-warming cross-encoder reranker (downloads model if not cached)...")
+    await asyncio.to_thread(_get_cross_encoder_reranker)
+    logger.info("Cross-encoder reranker ready.")
+
     minio = _get_minio_client()
     await minio.connect()
-    await minio.create_bucket("materials")
+    await minio.create_bucket(MINIO_MATERIALS_BUCKET)
     logger.info("MinIO client connected.")
 
     try:

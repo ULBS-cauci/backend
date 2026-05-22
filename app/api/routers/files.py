@@ -1,9 +1,10 @@
 import logging
-import uuid
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
-from app.api.dependencies import get_file_service
+from app.api.dependencies import get_file_service, get_current_user, get_dev_course
 from app.services.file_service import FileService
 from app.schemas.knowledge_schemas import MaterialPublic
+from app.schemas.user_schemas import User
+from app.schemas.course_schemas import Course
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -13,12 +14,12 @@ router = APIRouter()
 async def upload_file(
     file: UploadFile = File(...),
     file_service: FileService = Depends(get_file_service),
-    course_id: uuid.UUID = uuid.UUID("123e4567-e89b-12d3-a456-426614174000"),
-    user_id: uuid.UUID = uuid.UUID("123e4567-e89b-12d3-a456-426614174001"),
+    current_user: User = Depends(get_current_user),
+    course: Course = Depends(get_dev_course),
 ):
     try:
         return await file_service.upload_and_index(
-            file, course_id=course_id, user_id=user_id
+            file, course_id=course.id, user_id=current_user.id
         )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))

@@ -18,6 +18,8 @@ class AppSettings(_Base):
     EMBEDDING_CLIENT_TYPE: str = "ollama"
     LLM_CLIENT_TYPE: str = "openai"
     OBJECT_STORAGE_CLIENT_TYPE: str = "minio"
+    RERANKER_CLIENT_TYPE: str = "cross-encoder"
+    SPARSE_ENCODER_CLIENT_TYPE: str = "bge-m3"
 
 
 class QdrantSettings(_Base):
@@ -52,6 +54,23 @@ class PostgresSettings(_Base):
     POSTGRES_SSL: bool = False
 
 
+class CrossEncoderSettings(_Base):
+    CROSS_ENCODER_MODEL: str = "BAAI/bge-reranker-v2-m3"
+    CROSS_ENCODER_SCORE_THRESHOLD: float = 0.0
+
+
+class BM25Settings(_Base):
+    BM25_MODEL: str = "Qdrant/bm25"
+
+
+class BGEM3Settings(_Base):
+    BGEM3_MODEL: str = "BAAI/bge-m3"
+      
+      
 class ChunkingSettings(_Base):
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 100
+
+
+MINIO_MATERIALS_BUCKET = "materials"
+QDRANT_MATERIALS_COLLECTION = "university_library"

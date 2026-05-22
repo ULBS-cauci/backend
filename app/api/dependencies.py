@@ -1,6 +1,11 @@
 from functools import lru_cache
 from fastapi import Depends, HTTPException, status
 import uuid
+from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
+from app.data_access.clients.bm25_client import BM25SparseEncoder
+from app.data_access.clients.bge_m3_sparse_client import BGEM3SparseEncoder
+from app.data_access.interfaces.reranker import RerankerInterface
+from app.data_access.clients.cross_encoder_client import CrossEncoderReranker
 
 from app.schemas.user_schemas import User, UserRole
 from app.data_access.clients.qdrant_client import QdrantClient
@@ -12,6 +17,9 @@ from app.core.config import (
     OpenAISettings,
     MinIOSettings,
     PostgresSettings,
+    CrossEncoderSettings,
+    BM25Settings,
+    BGEM3Settings,
     ChunkingSettings,
 )
 
@@ -208,16 +216,93 @@ async def get_current_user(
     return user
 
 
+async def get_dev_course(
+    db: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+):
+    from app.schemas.course_schemas import Course
+
+    dummy_id = uuid.UUID("00000000-0000-0000-0000-000000000002")
+    course = await db.get(Course, dummy_id)
+    if not course:
+        course = Course(
+            id=dummy_id,
+            title="Dev Course",
+            description="Auto-created dev course for testing.",
+            held_by=current_user.id,
+        )
+        db.add(course)
+        await db.commit()
+        await db.refresh(course)
+    return course
+
+
+@lru_cache()
+def _get_bm25_sparse_encoder() -> BM25SparseEncoder:
+    """Instantiates and caches the BM25 sparse encoder. Downloads vocabulary on first call."""
+    settings = BM25Settings()
+    return BM25SparseEncoder(model_name=settings.BM25_MODEL)
+
+
+@lru_cache()
+def _get_bgem3_settings() -> BGEM3Settings:
+    return BGEM3Settings()  # type: ignore
+
+
+@lru_cache()
+def _get_bgem3_sparse_encoder() -> BGEM3SparseEncoder:
+    """Instantiates and caches the BGE-M3 sparse encoder. Downloads model on first call (~570MB)."""
+    settings = _get_bgem3_settings()
+    return BGEM3SparseEncoder(model_name=settings.BGEM3_MODEL)
+
+
+def get_sparse_encoder(
+    app: AppSettings = Depends(get_app_settings),
+) -> SparseEncoderInterface:
+    """Yields the configured sparse encoder. Typed against the ABC interface."""
+    if app.SPARSE_ENCODER_CLIENT_TYPE == "bge-m3":
+        return _get_bgem3_sparse_encoder()
+    if app.SPARSE_ENCODER_CLIENT_TYPE == "bm25":
+        return _get_bm25_sparse_encoder()
+    raise ValueError(f"Unsupported sparse encoder type: {app.SPARSE_ENCODER_CLIENT_TYPE}")
+
+
+@lru_cache()
+def get_cross_encoder_settings() -> CrossEncoderSettings:
+    """Reads and caches CrossEncoderSettings once per application lifecycle."""
+    return CrossEncoderSettings()  # type: ignore
+
+
+@lru_cache()
+def _get_cross_encoder_reranker() -> CrossEncoderReranker:
+    """Instantiates and caches the cross-encoder reranker. Downloads model on first call."""
+    settings = get_cross_encoder_settings()
+    return CrossEncoderReranker(model_name=settings.CROSS_ENCODER_MODEL)
+
+
+def get_reranker(app: AppSettings = Depends(get_app_settings)) -> RerankerInterface:
+    """Yields the configured reranker. Typed against the ABC interface."""
+    if app.RERANKER_CLIENT_TYPE == "cross-encoder":
+        return _get_cross_encoder_reranker()
+    raise ValueError(f"Unsupported reranker type: {app.RERANKER_CLIENT_TYPE}")
+
+
 def get_chat_service(
     vector_db: VectorDBInterface = Depends(get_vector_db_client),
     embedding_client: EmbeddingInterface = Depends(get_embedding_client),
     llm_client: LLMInterface = Depends(get_llm_client),
+    sparse_encoder: SparseEncoderInterface = Depends(get_sparse_encoder),
+    reranker: RerankerInterface = Depends(get_reranker),
     db_session: AsyncSession = Depends(get_db_session),
+    cross_encoder_settings: CrossEncoderSettings = Depends(get_cross_encoder_settings),
 ) -> ChatService:
     return ChatService(
         vector_db=vector_db,
         embedding_client=embedding_client,
         llm_client=llm_client,
+        sparse_encoder=sparse_encoder,
+        reranker=reranker,
+        score_threshold=cross_encoder_settings.CROSS_ENCODER_SCORE_THRESHOLD,
         db_session=db_session,
     )
 
@@ -226,6 +311,7 @@ def get_file_service(
     vector_db: VectorDBInterface = Depends(get_vector_db_client),
     embed_client: EmbeddingInterface = Depends(get_embedding_client),
     object_storage: ObjectStorageInterface = Depends(get_object_storage_client),
+    sparse_encoder: SparseEncoderInterface = Depends(get_sparse_encoder),
     text_splitter: TextSplitterInterface = Depends(get_text_splitter),
     db: AsyncSession = Depends(get_db_session),
 ) -> FileService:
@@ -233,6 +319,7 @@ def get_file_service(
         vector_db=vector_db, 
         embed_client=embed_client, 
         object_storage=object_storage,
+        sparse_encoder=sparse_encoder,
         text_splitter=text_splitter,
         db=db
     )
