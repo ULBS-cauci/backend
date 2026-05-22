@@ -135,7 +135,7 @@ class QdrantClient(VectorDBInterface):
             points = [
                 PointStruct(
                     id=chunk.id,
-                    vector=dense_vec,
+                    vector={"dense": dense_vec},
                     payload={"text": chunk.text, "metadata": chunk.metadata},
                 )
                 for chunk, dense_vec in zip(chunks, vectors)

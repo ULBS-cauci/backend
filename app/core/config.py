@@ -2,6 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 MATERIALS_BUCKET: str = "materials"
+QDRANT_MATERIALS_COLLECTION: str = "university_library"
 
 
 class _Base(BaseSettings):
