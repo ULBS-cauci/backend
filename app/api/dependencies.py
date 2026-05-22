@@ -130,14 +130,19 @@ def get_chunking_settings() -> ChunkingSettings:
     return ChunkingSettings()  # type: ignore
 
 
-def get_text_splitter(
-    chunking_settings: ChunkingSettings = Depends(get_chunking_settings),
-) -> TextSplitterInterface:
-    """Creates a text splitter with configured chunk size and overlap."""
+@lru_cache()
+def _get_text_splitter() -> LangChainRecursiveSplitterClient:
+    """Caches the text splitter per application lifecycle."""
+    chunking_settings = get_chunking_settings()
     return LangChainRecursiveSplitterClient(
         chunk_size=chunking_settings.CHUNK_SIZE,
-        chunk_overlap=chunking_settings.CHUNK_OVERLAP
+        chunk_overlap=chunking_settings.CHUNK_OVERLAP,
     )
+
+
+def get_text_splitter() -> TextSplitterInterface:
+    """Yields the configured text splitter."""
+    return _get_text_splitter()
 
 
 def get_object_storage_client(
