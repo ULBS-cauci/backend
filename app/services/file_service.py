@@ -37,7 +37,7 @@ class FileService:
         self.object_storage = object_storage
         self.sparse_encoder = sparse_encoder        
         self.text_splitter = text_splitter
-        self.db = db 
+        self.db = db
 
     async def upload_and_index(
         self, file: UploadFile, course_id: uuid.UUID, user_id: uuid.UUID
@@ -80,8 +80,13 @@ class FileService:
         try:
             full_text = await asyncio.to_thread(extract_text_from_pdf, content)
         except ValueError as exc:
+            error_message = str(exc)
+            if error_message == "PDF contains no extractable text":
+                raise ValueError(
+                    f"Document {filename} contains no extractable text."
+                ) from exc
             raise ValueError(
-                f"Document {filename} contains no extractable text."
+                f"Failed to process document {filename}: {error_message}"
             ) from exc
 
         # Use injected text splitter with configured chunk size/overlap
