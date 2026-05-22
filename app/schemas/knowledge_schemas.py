@@ -1,3 +1,4 @@
+import enum
 from typing import Optional
 from datetime import datetime, timezone
 import uuid
@@ -5,6 +6,13 @@ from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, DateTime, func
 
 from app.schemas.time_schema import TimestampSchema
+
+
+class IngestionStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
 
 
 # ---------------------------------------------------------
@@ -25,6 +33,8 @@ class Material(MaterialBase, TimestampSchema, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     uploaded_by: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id")
     object_storage_key: Optional[str] = Field(default=None, max_length=2048)
+    ingestion_status: IngestionStatus = Field(default=IngestionStatus.PENDING)
+    ingestion_error: Optional[str] = Field(default=None)
 
 
 # ---------------------------------------------------------
@@ -43,3 +53,5 @@ class MaterialPublic(MaterialBase):
     object_storage_key: Optional[str]
     created_at: datetime
     preview_url: Optional[str] = None
+    ingestion_status: IngestionStatus
+    ingestion_error: Optional[str] = None

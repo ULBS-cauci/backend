@@ -40,3 +40,14 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - ./data/postgres_data:/var/lib/postgresql/data
+
+  # ─── Redis — Job Queue (ARQ) ──────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: redis_queue
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - ./data/redis_data:/data
+    command: redis-server --appendonly yes

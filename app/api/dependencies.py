@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Optional
 from fastapi import Depends, HTTPException, status
 import uuid
 from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
@@ -22,6 +23,14 @@ from app.core.config import (
     BGEM3Settings,
     ChunkingSettings,
 )
+
+_arq_pool: Optional[object] = None
+
+
+def get_arq_pool():
+    if _arq_pool is None:
+        raise RuntimeError("ARQ pool not initialized. Check startup sequence.")
+    return _arq_pool
 
 from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.data_access.clients.embedding_client import OllamaEmbeddingClient
@@ -308,18 +317,8 @@ def get_chat_service(
 
 
 def get_file_service(
-    vector_db: VectorDBInterface = Depends(get_vector_db_client),
-    embed_client: EmbeddingInterface = Depends(get_embedding_client),
     object_storage: ObjectStorageInterface = Depends(get_object_storage_client),
-    sparse_encoder: SparseEncoderInterface = Depends(get_sparse_encoder),
-    text_splitter: TextSplitterInterface = Depends(get_text_splitter),
     db: AsyncSession = Depends(get_db_session),
+    arq_pool=Depends(get_arq_pool),
 ) -> FileService:
-    return FileService(
-        vector_db=vector_db, 
-        embed_client=embed_client, 
-        object_storage=object_storage,
-        sparse_encoder=sparse_encoder,
-        text_splitter=text_splitter,
-        db=db
-    )
+    return FileService(object_storage=object_storage, db=db, arq_pool=arq_pool)

@@ -4,6 +4,8 @@ from fastapi import FastAPI
 import logging
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import SQLModel
+from arq import create_pool
+from arq.connections import RedisSettings as ArqRedisSettings
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -16,9 +18,10 @@ from app.schemas.chat_schemas import Conversation, Message, Attachment, SharedLi
 from app.schemas.admin_schemas import SystemPrompt, LlmTip
 
 from app.api.dependencies import _get_async_engine, _get_bgem3_sparse_encoder, _get_cross_encoder_reranker, _get_minio_client
+import app.api.dependencies as deps
+from app.core.config import RedisSettings, MATERIALS_BUCKET
 
 from app.api.routers import files
-from app.core.config import MINIO_MATERIALS_BUCKET
 
 
 @asynccontextmanager
@@ -41,12 +44,21 @@ async def lifespan(app: FastAPI):
 
     minio = _get_minio_client()
     await minio.connect()
-    await minio.create_bucket(MINIO_MATERIALS_BUCKET)
+    await minio.create_bucket(MATERIALS_BUCKET)
     logger.info("MinIO client connected.")
+
+    redis_cfg = RedisSettings()
+    arq_pool = await create_pool(
+        ArqRedisSettings(host=redis_cfg.REDIS_HOST, port=redis_cfg.REDIS_PORT)
+    )
+    deps._arq_pool = arq_pool
+    logger.info("ARQ Redis pool connected.")
 
     try:
         yield
     finally:
+        await arq_pool.close(True)
+        logger.info("ARQ Redis pool closed.")
         await minio.close()
         logger.info("MinIO client closed.")
         await engine.dispose()

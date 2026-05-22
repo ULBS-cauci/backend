@@ -1,6 +1,8 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
+MATERIALS_BUCKET: str = "materials"
+
 
 class _Base(BaseSettings):
     model_config = SettingsConfigDict(
@@ -72,5 +74,6 @@ class ChunkingSettings(_Base):
     CHUNK_OVERLAP: int = 100
 
 
-MINIO_MATERIALS_BUCKET = "materials"
-QDRANT_MATERIALS_COLLECTION = "university_library"
+class RedisSettings(_Base):
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379

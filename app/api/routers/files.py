@@ -1,8 +1,10 @@
+import uuid
 import logging
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
-from app.api.dependencies import get_file_service, get_current_user, get_dev_course
+from sqlmodel.ext.asyncio.session import AsyncSession
+from app.api.dependencies import get_file_service, get_current_user, get_dev_course, get_db_session
 from app.services.file_service import FileService
-from app.schemas.knowledge_schemas import MaterialPublic
+from app.schemas.knowledge_schemas import Material, MaterialPublic
 from app.schemas.user_schemas import User
 from app.schemas.course_schemas import Course
 
@@ -26,3 +28,14 @@ async def upload_file(
     except Exception as e:
         logger.error(f"Error during upload: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+@router.get("/{material_id}/status", response_model=MaterialPublic)
+async def get_material_status(
+    material_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_session),
+):
+    material = await db.get(Material, material_id)
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+    return MaterialPublic.model_validate(material)
