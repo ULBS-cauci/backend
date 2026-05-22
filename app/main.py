@@ -15,7 +15,7 @@ from app.schemas.knowledge_schemas import Material
 from app.schemas.chat_schemas import Conversation, Message, Attachment, SharedLink
 from app.schemas.admin_schemas import SystemPrompt, LlmTip
 
-from app.api.dependencies import _get_async_engine, _get_bm25_sparse_encoder, _get_cross_encoder_reranker, _get_minio_client
+from app.api.dependencies import _get_async_engine, _get_bgem3_sparse_encoder, _get_cross_encoder_reranker, _get_minio_client
 
 from app.api.routers import files
 from app.core.config import MINIO_MATERIALS_BUCKET
@@ -31,9 +31,9 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(SQLModel.metadata.create_all)
     logger.info("Database tables initialized successfully.")
 
-    logger.info("Pre-warming BM25 sparse encoder (downloads vocabulary if not cached)...")
-    await asyncio.to_thread(_get_bm25_sparse_encoder)
-    logger.info("BM25 sparse encoder ready.")
+    logger.info("Pre-warming BGE-M3 sparse encoder (downloads model if not cached, ~570MB)...")
+    await asyncio.to_thread(_get_bgem3_sparse_encoder)
+    logger.info("BGE-M3 sparse encoder ready.")
 
     logger.info("Pre-warming cross-encoder reranker (downloads model if not cached)...")
     await asyncio.to_thread(_get_cross_encoder_reranker)

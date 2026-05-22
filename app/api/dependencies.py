@@ -3,6 +3,7 @@ from fastapi import Depends, HTTPException, status
 import uuid
 from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
 from app.data_access.clients.bm25_client import BM25SparseEncoder
+from app.data_access.clients.bge_m3_sparse_client import BGEM3SparseEncoder
 from app.data_access.interfaces.reranker import RerankerInterface
 from app.data_access.clients.cross_encoder_client import CrossEncoderReranker
 
@@ -18,6 +19,7 @@ from app.core.config import (
     PostgresSettings,
     CrossEncoderSettings,
     BM25Settings,
+    BGEM3Settings,
     ChunkingSettings,
 )
 
@@ -230,9 +232,27 @@ def _get_bm25_sparse_encoder() -> BM25SparseEncoder:
     return BM25SparseEncoder(model_name=settings.BM25_MODEL)
 
 
-def get_sparse_encoder() -> SparseEncoderInterface:
+@lru_cache()
+def _get_bgem3_settings() -> BGEM3Settings:
+    return BGEM3Settings()  # type: ignore
+
+
+@lru_cache()
+def _get_bgem3_sparse_encoder() -> BGEM3SparseEncoder:
+    """Instantiates and caches the BGE-M3 sparse encoder. Downloads model on first call (~570MB)."""
+    settings = _get_bgem3_settings()
+    return BGEM3SparseEncoder(model_name=settings.BGEM3_MODEL)
+
+
+def get_sparse_encoder(
+    app: AppSettings = Depends(get_app_settings),
+) -> SparseEncoderInterface:
     """Yields the configured sparse encoder. Typed against the ABC interface."""
-    return _get_bm25_sparse_encoder()
+    if app.SPARSE_ENCODER_CLIENT_TYPE == "bge-m3":
+        return _get_bgem3_sparse_encoder()
+    if app.SPARSE_ENCODER_CLIENT_TYPE == "bm25":
+        return _get_bm25_sparse_encoder()
+    raise ValueError(f"Unsupported sparse encoder type: {app.SPARSE_ENCODER_CLIENT_TYPE}")
 
 
 @lru_cache()
