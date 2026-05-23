@@ -68,4 +68,4 @@ dmypy.json
 # Docker volume data (paths match docker-compose.yml mounts in backend/)
 data/
 
-scripts/
+scripts/seed_materials
