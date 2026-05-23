@@ -60,7 +60,6 @@ class MessageCreate(SQLModel):
 # ATTACHMENT
 # ==========================================
 class AttachmentBase(SQLModel):
-    message_id: uuid.UUID = Field(foreign_key="messages.id")
     file_name: str = Field(max_length=255)
     
 class Attachment(AttachmentBase, TimestampSchema, table=True):
