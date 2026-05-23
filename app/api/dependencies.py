@@ -21,6 +21,7 @@ from app.core.config import (
     BM25Settings,
     BGEM3Settings,
     ChunkingSettings,
+    IngestionSettings,
 )
 
 from app.data_access.interfaces.embedding import EmbeddingInterface
@@ -52,7 +53,9 @@ def _get_qdrant_client() -> QdrantClient:
     """Caches the Qdrant connection pool per application lifecycle."""
     settings = QdrantSettings()  # type: ignore
     return QdrantClient(
-        endpoint=settings.QDRANT_ENDPOINT, api_key=settings.QDRANT_API_KEY
+        endpoint=settings.QDRANT_ENDPOINT,
+        api_key=settings.QDRANT_API_KEY,
+        upsert_batch_size=settings.QDRANT_UPSERT_BATCH_SIZE,
     )
 
 
@@ -88,7 +91,9 @@ def _get_ollama_embedding_client() -> OllamaEmbeddingClient:
     """Caches the Ollama embedding client per application lifecycle."""
     settings = OllamaSettings()  # type: ignore
     return OllamaEmbeddingClient(
-        host=settings.OLLAMA_HOST, model_name=settings.OLLAMA_EMBED_MODEL
+        host=settings.OLLAMA_HOST,
+        model_name=settings.OLLAMA_EMBED_MODEL,
+        batch_size=settings.OLLAMA_EMBED_BATCH_SIZE,
     )
 
 
@@ -117,6 +122,12 @@ def _get_minio_client() -> MinIOClient:
 def get_chunking_settings() -> ChunkingSettings:
     """Caches the chunking settings per application lifecycle."""
     return ChunkingSettings()  # type: ignore
+
+
+@lru_cache()
+def get_ingestion_settings() -> IngestionSettings:
+    """Caches the ingestion pipeline settings per application lifecycle."""
+    return IngestionSettings()  # type: ignore
 
 
 def get_object_storage_client(
@@ -252,7 +263,9 @@ def get_sparse_encoder(
         return _get_bgem3_sparse_encoder()
     if app.SPARSE_ENCODER_CLIENT_TYPE == "bm25":
         return _get_bm25_sparse_encoder()
-    raise ValueError(f"Unsupported sparse encoder type: {app.SPARSE_ENCODER_CLIENT_TYPE}")
+    raise ValueError(
+        f"Unsupported sparse encoder type: {app.SPARSE_ENCODER_CLIENT_TYPE}"
+    )
 
 
 @lru_cache()
@@ -302,6 +315,7 @@ def get_file_service(
     sparse_encoder: SparseEncoderInterface = Depends(get_sparse_encoder),
     db: AsyncSession = Depends(get_db_session),
     chunking_settings: ChunkingSettings = Depends(get_chunking_settings),
+    ingestion_settings: IngestionSettings = Depends(get_ingestion_settings),
 ) -> FileService:
     return FileService(
         vector_db=vector_db,
@@ -310,4 +324,5 @@ def get_file_service(
         sparse_encoder=sparse_encoder,
         db=db,
         chunking_settings=chunking_settings,
+        ingestion_settings=ingestion_settings,
     )

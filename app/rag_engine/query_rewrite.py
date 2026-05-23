@@ -10,12 +10,16 @@ CONDENSATION_SYSTEM_PROMPT = (
 )
 
 
-def build_condensation_messages(history: List[Message], follow_up: str) -> List[ChatMessage]:
+def build_condensation_messages(
+    history: List[Message], follow_up: str
+) -> List[ChatMessage]:
     history_text = "\n".join(
         f"{'Student' if msg.sender == MessageSender.USER else 'Tutor'}: {msg.content}"
         for msg in history
     )
-    user_content = f"Conversation history:\n{history_text}\n\nFollow-up question: {follow_up}"
+    user_content = (
+        f"Conversation history:\n{history_text}\n\nFollow-up question: {follow_up}"
+    )
     return [
         ChatMessage(role=MessageRole.SYSTEM, content=CONDENSATION_SYSTEM_PROMPT),
         ChatMessage(role=MessageRole.USER, content=user_content),

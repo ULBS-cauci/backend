@@ -11,3 +11,8 @@ langchain-text-splitters
 fastembed>=0.5.0
 sentence-transformers
 FlagEmbedding>=1.2.0
+# torch is a transitive dep of the two packages above.
+# pip installs the CPU-only build by default, which runs BGE-M3 ~15x slower.
+# On a CUDA-capable machine, reinstall after `pip install -r requirements.txt`:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128 --force-reinstall --no-deps
+# RTX 50 series (Blackwell) requires cu128; older cards can use cu121 or cu124.

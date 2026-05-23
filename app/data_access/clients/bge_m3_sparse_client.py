@@ -1,16 +1,21 @@
 import asyncio
 from typing import List
 
+import torch
 from FlagEmbedding import BGEM3FlagModel
 
 from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
 from app.schemas.vector_schemas import SparseVectorSchema
 
+# Use GPU (FP16) when CUDA is available, fall back to CPU (FP32) otherwise.
+_CUDA_AVAILABLE: bool = torch.cuda.is_available()
+_USE_FP16: bool = _CUDA_AVAILABLE
+_BATCH_SIZE: int = 64 if _CUDA_AVAILABLE else 12
+
 
 class BGEM3SparseEncoder(SparseEncoderInterface):
-    # use_fp16=False is required for CPU-only inference
     def __init__(self, model_name: str = "BAAI/bge-m3") -> None:
-        self._model = BGEM3FlagModel(model_name, use_fp16=False)
+        self._model = BGEM3FlagModel(model_name, use_fp16=_USE_FP16)
 
     async def encode_passages(self, texts: List[str]) -> List[SparseVectorSchema]:
         def _run() -> List[SparseVectorSchema]:
@@ -19,7 +24,7 @@ class BGEM3SparseEncoder(SparseEncoderInterface):
                 return_dense=False,
                 return_sparse=True,
                 return_colbert_vecs=False,
-                batch_size=12,
+                batch_size=_BATCH_SIZE,
             )
             return [
                 SparseVectorSchema(

@@ -12,6 +12,7 @@ from app.services.chat_service import ChatService
 
 router = APIRouter()
 
+
 @router.get("/", response_model=List[ConversationPublic])
 async def list_conversations(
     current_user: User = Depends(get_current_user),
@@ -19,6 +20,7 @@ async def list_conversations(
 ):
     conversations = await service.get_user_conversations(user_id=current_user.id)
     return conversations
+
 
 @router.post("/", response_model=ConversationPublic)
 async def create_conversation(
@@ -28,18 +30,24 @@ async def create_conversation(
     conversation = await service.create_conversation(user_id=current_user.id)
     return conversation
 
+
 @router.get("/{conversation_id}/messages", response_model=List[MessagePublic])
 async def list_conversation_messages(
     conversation_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ):
-    conversation = await service.get_conversation_for_user(conversation_id=conversation_id, user_id=current_user.id)
+    conversation = await service.get_conversation_for_user(
+        conversation_id=conversation_id, user_id=current_user.id
+    )
     if not conversation:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-    
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
+        )
+
     messages = await service.get_conversation_messages(conversation_id=conversation_id)
     return messages
+
 
 @router.post("/ask")
 async def ask(
@@ -48,12 +56,21 @@ async def ask(
     service: ChatService = Depends(get_chat_service),
 ):
     if payload.conversation_id:
-        conversation = await service.get_conversation_for_user(conversation_id=payload.conversation_id, user_id=current_user.id)
+        conversation = await service.get_conversation_for_user(
+            conversation_id=payload.conversation_id, user_id=current_user.id
+        )
         if not conversation:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found or unauthorized")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found or unauthorized",
+            )
 
     async def event_stream():
-        async for chunk in service.ask_stream(query=payload.content, user_id=current_user.id, conversation_id=payload.conversation_id):
+        async for chunk in service.ask_stream(
+            query=payload.content,
+            user_id=current_user.id,
+            conversation_id=payload.conversation_id,
+        ):
             yield f"data: {json.dumps(chunk)}\n\n"
         yield "data: [DONE]\n\n"
 

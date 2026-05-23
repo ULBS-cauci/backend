@@ -7,6 +7,7 @@ from sqlalchemy import Column, DateTime, func
 
 from app.schemas.time_schema import TimeSchema
 
+
 class UserRole(str, Enum):
     STUDENT = "Student"
     PROFESSOR = "Professor"

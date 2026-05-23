@@ -1,12 +1,15 @@
+import logging
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
-from app.api.dependencies import get_course_service, get_file_service
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from app.api.dependencies import get_course_service, get_current_user, get_file_service
 from app.services.course_service import CourseService
 from app.services.file_service import FileService
 from app.schemas.course_schemas import CourseCreate, CourseDisplay, CourseUpdate
 from app.schemas.knowledge_schemas import MaterialPublic
+from app.schemas.user_schemas import User
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 HARDCODED_TEACHER_ID = uuid.UUID("123e4567-e89b-12d3-a456-426614174001")
 
@@ -31,6 +34,29 @@ async def get_course_materials(
     file_service: FileService = Depends(get_file_service),
 ):
     return await file_service.get_materials_by_course(course_id)
+
+
+@router.post(
+    "/{course_id}/materials",
+    response_model=MaterialPublic,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_course_material(
+    course_id: uuid.UUID,
+    file: UploadFile = File(...),
+    file_service: FileService = Depends(get_file_service),
+    current_user: User = Depends(get_current_user),
+):
+    """Upload and index a PDF into the given course."""
+    try:
+        return await file_service.upload_and_index(
+            file, course_id=course_id, user_id=current_user.id
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.error("Error during upload: %s", str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
 @router.post("/", response_model=CourseDisplay, status_code=status.HTTP_201_CREATED)

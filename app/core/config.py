@@ -25,11 +25,15 @@ class AppSettings(_Base):
 class QdrantSettings(_Base):
     QDRANT_ENDPOINT: str
     QDRANT_API_KEY: Optional[str] = None
+    QDRANT_UPSERT_BATCH_SIZE: int = (
+        256  # max points per upsert request (stays under Qdrant's 32 MiB cap)
+    )
 
 
 class OllamaSettings(_Base):
     OLLAMA_HOST: str
     OLLAMA_EMBED_MODEL: str
+    OLLAMA_EMBED_BATCH_SIZE: int = 128  # max texts per Ollama embed request
 
 
 class OpenAISettings(_Base):
@@ -65,11 +69,17 @@ class BM25Settings(_Base):
 
 class BGEM3Settings(_Base):
     BGEM3_MODEL: str = "BAAI/bge-m3"
-      
-      
+
+
 class ChunkingSettings(_Base):
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 100
+
+
+class IngestionSettings(_Base):
+    INGEST_BATCH_SIZE: int = (
+        256  # chunks processed per pipeline batch (overlap unit + memory bound)
+    )
 
 
 MINIO_MATERIALS_BUCKET = "materials"
