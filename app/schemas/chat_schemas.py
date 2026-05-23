@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from datetime import datetime, timezone
 import uuid
 from enum import Enum
@@ -54,6 +54,7 @@ class MessageCreate(SQLModel):
     conversation_id: Optional[uuid.UUID] = None
     content: str = Field(..., min_length=5, description="The content of the message.")
     output_type_requested: Optional[str] = Field(default=None, max_length=100)
+    attachment_ids: List[uuid.UUID] = Field(default_factory=list)
 
 # ==========================================
 # ATTACHMENT
@@ -65,10 +66,14 @@ class AttachmentBase(SQLModel):
 class Attachment(AttachmentBase, TimestampSchema, table=True):
     __tablename__ = "attachments"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    object_storage_key: str = Field(max_length=2048) # Replaces file_url
+    user_id: uuid.UUID = Field(foreign_key="users.id")
+    message_id: Optional[uuid.UUID] = Field(default=None, foreign_key="messages.id")
+    file_name: str = Field(max_length=255)
+    object_storage_key: str = Field(max_length=2048)
 
-class AttachmentPublic(AttachmentBase):
+class AttachmentPublic(SQLModel):
     id: uuid.UUID
+    file_name: str
     object_storage_key: str
     created_at: datetime
 

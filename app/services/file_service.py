@@ -5,6 +5,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import ChunkingSettings
+from app.core.helpers import build_material_object_key
 from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.data_access.interfaces.object_storage import ObjectStorageInterface
@@ -19,9 +20,6 @@ from app.workers.ingestion_worker import (
     create_document_chunks,
 )
 
-
-def build_object_key(course_id: uuid.UUID, filename: str) -> str:
-    return f"{course_id}/{uuid.uuid4()}_{filename}"
 
 
 class FileService:
@@ -50,7 +48,8 @@ class FileService:
             raise ValueError("Only PDF files are accepted.")
 
         content = await file.read()
-        object_key = build_object_key(course_id, filename)
+        material_id = uuid.uuid4()
+        object_key = build_material_object_key(course_id, material_id, filename)
 
         collection_name = await self.process_and_index_pdf(content, filename)
 
@@ -62,6 +61,7 @@ class FileService:
             uploaded = True
 
             material = Material(
+                id=material_id,
                 course_id=course_id,
                 file_name=filename,
                 file_type="pdf",

@@ -8,7 +8,7 @@ from app.schemas.knowledge_schemas import MaterialPublic
 
 router = APIRouter()
 
-HARDCODED_TEACHER_ID = uuid.UUID("123e4567-e89b-12d3-a456-426614174001")
+HARDCODED_TEACHER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
 @router.get("/", response_model=list[CourseDisplay])
