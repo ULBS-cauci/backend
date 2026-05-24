@@ -1,6 +1,6 @@
 from functools import lru_cache
-from typing import Optional
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
+from arq.connections import ArqRedis
 import uuid
 from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
 from app.data_access.clients.bm25_client import BM25SparseEncoder
@@ -24,13 +24,8 @@ from app.core.config import (
     ChunkingSettings,
 )
 
-_arq_pool: Optional[object] = None
-
-
-def get_arq_pool():
-    if _arq_pool is None:
-        raise RuntimeError("ARQ pool not initialized. Check startup sequence.")
-    return _arq_pool
+def get_arq_pool(request: Request) -> ArqRedis:
+    return request.app.state.arq_pool
 
 from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.data_access.clients.embedding_client import OllamaEmbeddingClient
@@ -324,6 +319,6 @@ def get_chat_service(
 def get_file_service(
     object_storage: ObjectStorageInterface = Depends(get_object_storage_client),
     db: AsyncSession = Depends(get_db_session),
-    arq_pool=Depends(get_arq_pool),
+    arq_pool: ArqRedis = Depends(get_arq_pool),
 ) -> FileService:
     return FileService(object_storage=object_storage, db=db, arq_pool=arq_pool)

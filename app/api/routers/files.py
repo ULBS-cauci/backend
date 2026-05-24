@@ -34,8 +34,11 @@ async def upload_file(
 async def get_material_status(
     material_id: uuid.UUID,
     db: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
 ):
     material = await db.get(Material, material_id)
     if not material:
         raise HTTPException(status_code=404, detail="Material not found")
+    if material.uploaded_by is not None and material.uploaded_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
     return MaterialPublic.model_validate(material)

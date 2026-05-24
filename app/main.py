@@ -18,7 +18,6 @@ from app.schemas.chat_schemas import Conversation, Message, Attachment, SharedLi
 from app.schemas.admin_schemas import SystemPrompt, LlmTip
 
 from app.api.dependencies import _get_async_engine, _get_bgem3_sparse_encoder, _get_cross_encoder_reranker, _get_minio_client
-import app.api.dependencies as deps
 from app.core.config import RedisSettings, MATERIALS_BUCKET
 
 from app.api.routers import files
@@ -51,7 +50,7 @@ async def lifespan(app: FastAPI):
     arq_pool = await create_pool(
         ArqRedisSettings(host=redis_cfg.REDIS_HOST, port=redis_cfg.REDIS_PORT)
     )
-    deps._arq_pool = arq_pool
+    app.state.arq_pool = arq_pool
     logger.info("ARQ Redis pool connected.")
 
     try:

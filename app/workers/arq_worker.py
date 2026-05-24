@@ -16,16 +16,19 @@ from app.core.config import (
     PostgresSettings,
     ChunkingSettings,
     MATERIALS_BUCKET,
+    QDRANT_MATERIALS_COLLECTION,
 )
 from app.data_access.clients.qdrant_client import QdrantClient
 from app.data_access.clients.embedding_client import OllamaEmbeddingClient
 from app.data_access.clients.minio_client import MinIOClient
 from app.data_access.clients.langchain_splitter_client import LangChainRecursiveSplitterClient
-from app.schemas.course_schemas import Course 
-from app.schemas.user_schemas import User 
-from app.schemas.chat_schemas import Conversation, Message, Attachment, SharedLink  
-from app.schemas.admin_schemas import SystemPrompt, LlmTip  
+
+from app.schemas.course_schemas import Course  
+from app.schemas.user_schemas import User  
+from app.schemas.chat_schemas import Conversation, Message, Attachment, SharedLink  # noqa: F401
+from app.schemas.admin_schemas import SystemPrompt, LlmTip 
 from app.schemas.knowledge_schemas import Material, IngestionStatus
+
 from app.workers.ingestion_worker import extract_text_from_pdf, create_document_chunks
 
 logger = logging.getLogger(__name__)
@@ -129,7 +132,7 @@ async def process_pdf_task(
         session.add(material)
         await session.commit()
 
-        collection_name = "university_library"
+        collection_name = QDRANT_MATERIALS_COLLECTION
         vectors_written = False
         try:
             content = await minio.download_file(MATERIALS_BUCKET, object_storage_key)
@@ -151,12 +154,14 @@ async def process_pdf_task(
                 raise ValueError("Number of embeddings does not match number of text chunks.")
 
             vector_size = len(vectors[0])
-            await qdrant.create_collection(collection_name, vector_size, sparse=True)
+            await qdrant.create_collection(collection_name, vector_size, sparse=False)
             await qdrant.upsert_chunks(collection_name, domain_chunks, vectors)
             vectors_written = True
 
             await session.refresh(material)
             material.ingestion_status = IngestionStatus.COMPLETED
+            material.vector_namespace = collection_name
+            material.ingestion_error = None
             session.add(material)
             await session.commit()
             logger.info(f"Material {material_id} ingestion COMPLETED.")
