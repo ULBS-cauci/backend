@@ -1,68 +1,98 @@
 """
-Synchronous worker for heavy PDF processing tasks.
-These functions run in a thread pool to avoid blocking the async event loop.
+Synchronous worker utilities for heavy document processing.
+All functions in this module are designed to run inside a thread pool
+via asyncio.to_thread() to avoid blocking the async event loop.
 """
-import io
+import os
+import tempfile
 import uuid
+from pathlib import Path
 from typing import List
-from pypdf import PdfReader
+
+from docling.document_converter import DocumentConverter
+
 from app.schemas.vector_schemas import DocumentChunk
 
+SUPPORTED_SUFFIXES: frozenset[str] = frozenset(
+    {".pdf", ".docx", ".pptx", ".png", ".jpg", ".jpeg"}
+)
 
-def extract_text_from_pdf(content: bytes) -> str:
-    """
-    Synchronous function to extract text from PDF content.
-    Designed to run in a thread pool via asyncio.to_thread()
-    
+
+def extract_text_with_docling(
+    content: bytes,
+    filename: str,
+    converter: DocumentConverter,
+) -> str:
+    """Convert any supported document to Markdown using a pre-initialized Docling converter.
+
+    Writes bytes to a NamedTemporaryFile (preserving the original file extension
+    so Docling selects the correct backend), runs the conversion, then deletes
+    the temp file in a finally block regardless of success or failure.
+
+    This function is synchronous and CPU-bound. Always call it via:
+        await asyncio.to_thread(extract_text_with_docling, content, filename, converter)
+
     Args:
-        content: Raw PDF file bytes
-        
+        content:   Raw file bytes downloaded from object storage.
+        filename:  Original filename; used to determine the format suffix and
+                   to produce informative error messages.
+        converter: A pre-warmed DocumentConverter instance injected from the
+                   ARQ worker context. Reusing one instance avoids the multi-second
+                   ML model loading cost on every job.
+
     Returns:
-        Extracted text from all PDF pages
-        
+        The document's full text as a Markdown string.
+
     Raises:
-        ValueError: If PDF cannot be read or contains no text
+        ValueError: If the file extension is unsupported, or if Docling produces
+                    an empty Markdown output.
     """
+    suffix: str = Path(filename).suffix.lower()
+    if suffix not in SUPPORTED_SUFFIXES:
+        raise ValueError(
+            f"Unsupported file format '{suffix}'. "
+            f"Accepted: {', '.join(sorted(SUPPORTED_SUFFIXES))}"
+        )
+
+    tmp_path: str = ""
     try:
-        pdf = PdfReader(io.BytesIO(content))
-        if not pdf.pages:
-            raise ValueError("PDF contains no pages")
-            
-        page_texts = [page.extract_text() or "" for page in pdf.pages]
-        full_text = "\n\n".join(page_texts)
-        
-        if not full_text.strip():
-            raise ValueError("PDF contains no extractable text")
-            
-        return full_text
-    except ValueError:
-        raise
-    except Exception as e:
-        raise ValueError(f"Failed to extract text from PDF: {str(e)}") from e
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        result = converter.convert(tmp_path)
+        markdown: str = result.document.export_to_markdown()
+
+        if not markdown.strip():
+            raise ValueError(f"Document '{filename}' contains no extractable text.")
+
+        return markdown
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 def create_document_chunks(
     text_chunks: List[str],
-    filename: str
+    filename: str,
 ) -> List[DocumentChunk]:
-    """
-    Synchronous function to create DocumentChunk objects.
-    Designed to run in a thread pool via asyncio.to_thread()
-    
+    """Map a list of text strings to DocumentChunk objects.
+
+    Each chunk receives a fresh UUID and a metadata dict carrying the source
+    filename, which is used later for targeted vector deletion.
+
     Args:
-        text_chunks: List of text chunks
-        filename: Source filename for metadata
-        
+        text_chunks: List of text strings produced by the text splitter.
+        filename:    Source filename stored in each chunk's metadata.
+
     Returns:
-        List of DocumentChunk objects
+        List of DocumentChunk objects ready for embedding and upsert.
     """
-    chunks = []
-    for text in text_chunks:
-        chunk = DocumentChunk(
+    return [
+        DocumentChunk(
             id=uuid.uuid4(),
-            text=text,
-            metadata={"source": filename}
+            text=chunk,
+            metadata={"source": filename},
         )
-        chunks.append(chunk)
-    
-    return chunks
+        for chunk in text_chunks
+    ]

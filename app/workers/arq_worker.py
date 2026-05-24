@@ -4,6 +4,7 @@ import uuid
 from functools import lru_cache
 
 from arq.connections import RedisSettings as ArqRedisSettings
+from docling.document_converter import DocumentConverter
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlalchemy.engine import URL
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -20,13 +21,16 @@ from app.core.config import (
 from app.data_access.clients.qdrant_client import QdrantClient
 from app.data_access.clients.embedding_client import OllamaEmbeddingClient
 from app.data_access.clients.minio_client import MinIOClient
-from app.data_access.clients.langchain_splitter_client import LangChainRecursiveSplitterClient
-from app.schemas.course_schemas import Course 
+from app.data_access.clients.markdown_splitter_client import MarkdownSplitterClient
+
+
+from app.schemas.course_schemas import Course  
 from app.schemas.user_schemas import User 
-from app.schemas.chat_schemas import Conversation, Message, Attachment, SharedLink  
-from app.schemas.admin_schemas import SystemPrompt, LlmTip  
+from app.schemas.chat_schemas import Conversation, Message, Attachment, SharedLink  # noqa: F401
+from app.schemas.admin_schemas import SystemPrompt, LlmTip 
 from app.schemas.knowledge_schemas import Material, IngestionStatus
-from app.workers.ingestion_worker import extract_text_from_pdf, create_document_chunks
+
+from app.workers.ingestion_worker import extract_text_with_docling, create_document_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -55,11 +59,14 @@ def _worker_minio_client() -> MinIOClient:
 
 
 @lru_cache()
-def _worker_text_splitter() -> LangChainRecursiveSplitterClient:
+def _worker_text_splitter() -> MarkdownSplitterClient:
     s = ChunkingSettings()  # type: ignore
-    return LangChainRecursiveSplitterClient(
-        chunk_size=s.CHUNK_SIZE, chunk_overlap=s.CHUNK_OVERLAP
-    )
+    return MarkdownSplitterClient(chunk_size=s.CHUNK_SIZE, chunk_overlap=s.CHUNK_OVERLAP)
+
+
+@lru_cache()
+def _worker_docling_converter() -> DocumentConverter:
+    return DocumentConverter()
 
 
 @lru_cache()
@@ -91,6 +98,7 @@ async def startup(ctx: dict) -> None:
     ctx["qdrant"] = _worker_qdrant_client()
     ctx["embed"] = _worker_embedding_client()
     ctx["splitter"] = _worker_text_splitter()
+    ctx["docling_converter"] = _worker_docling_converter()
     ctx["engine"] = _worker_db_engine()
     logger.info("ARQ worker clients ready.")
 
@@ -106,21 +114,33 @@ async def shutdown(ctx: dict) -> None:
     logger.info("ARQ worker shut down cleanly.")
 
 
-async def process_pdf_task(
+async def process_document_task(
     ctx: dict,
     material_id: str,
     object_storage_key: str,
     filename: str,
 ) -> dict:
-    mat_uuid = uuid.UUID(material_id)
+    """ARQ background task: download → extract → split → embed → upsert → update DB.
+
+    Args:
+        ctx:                ARQ worker context populated during startup.
+        material_id:        UUID string of the Material DB record to update.
+        object_storage_key: MinIO object key used to download the file.
+        filename:           Original filename, used for format detection and metadata.
+
+    Returns:
+        A status dict with "status" and "material_id" keys on success.
+    """
+    mat_uuid: uuid.UUID = uuid.UUID(material_id)
     minio: MinIOClient = ctx["minio"]
     qdrant: QdrantClient = ctx["qdrant"]
     embed: OllamaEmbeddingClient = ctx["embed"]
-    splitter: LangChainRecursiveSplitterClient = ctx["splitter"]
+    splitter: MarkdownSplitterClient = ctx["splitter"]
+    docling_converter: DocumentConverter = ctx["docling_converter"]
     engine: AsyncEngine = ctx["engine"]
 
     async with AsyncSession(engine, expire_on_commit=False) as session:
-        material = await session.get(Material, mat_uuid)
+        material: Material | None = await session.get(Material, mat_uuid)
         if not material:
             logger.error(f"Material {material_id} not found, aborting task.")
             return {"status": "not_found"}
@@ -129,28 +149,29 @@ async def process_pdf_task(
         session.add(material)
         await session.commit()
 
-        collection_name = "university_library"
-        vectors_written = False
+        collection_name: str = "university_library"
+        vectors_written: bool = False
         try:
-            content = await minio.download_file(MATERIALS_BUCKET, object_storage_key)
+            content: bytes = await minio.download_file(MATERIALS_BUCKET, object_storage_key)
 
-            full_text = await asyncio.to_thread(extract_text_from_pdf, content)
-            if not full_text.strip():
-                raise ValueError(f"Document {filename} contains no extractable text.")
+            full_text: str = await asyncio.to_thread(
+                extract_text_with_docling, content, filename, docling_converter
+            )
 
-            text_chunks = await asyncio.to_thread(splitter.split_text, full_text)
+            text_chunks: list[str] = await asyncio.to_thread(splitter.split_text, full_text)
+            text_chunks = list(dict.fromkeys(text_chunks))
             if not text_chunks:
-                raise ValueError("Could not create text chunks.")
+                raise ValueError("Text splitting produced no chunks.")
 
             domain_chunks = await asyncio.to_thread(create_document_chunks, text_chunks, filename)
 
-            vectors = await embed.embed_batch(text_chunks)
+            vectors: list[list[float]] = await embed.embed_batch(text_chunks)
             if not vectors:
-                raise ValueError(f"Embedding service returned no vectors for {filename}.")
+                raise ValueError(f"Embedding service returned no vectors for '{filename}'.")
             if len(vectors) != len(domain_chunks):
                 raise ValueError("Number of embeddings does not match number of text chunks.")
 
-            vector_size = len(vectors[0])
+            vector_size: int = len(vectors[0])
             await qdrant.create_collection(collection_name, vector_size, sparse=True)
             await qdrant.upsert_chunks(collection_name, domain_chunks, vectors)
             vectors_written = True
@@ -179,7 +200,7 @@ async def process_pdf_task(
 
 
 class WorkerSettings:
-    functions = [process_pdf_task]
+    functions = [process_document_task]
     on_startup = startup
     on_shutdown = shutdown
     max_jobs = 4
