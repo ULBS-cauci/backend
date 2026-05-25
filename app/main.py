@@ -12,8 +12,8 @@ logger = logging.getLogger("uvicorn.error")
 from app.schemas.course_schemas import Course
 from app.schemas.user_schemas import User
 from app.schemas.knowledge_schemas import Material
-from app.schemas.chat_schemas import Conversation, Message, Attachment, SharedLink
-from app.schemas.admin_schemas import SystemPrompt, LlmTip
+from app.schemas.chat_schemas import Conversation, Message, Attachment, SharedLink, OutputFormat
+from app.schemas.admin_schemas import SystemPrompt, LlmTip, TipCategory
 
 from app.api.dependencies import _get_async_engine, _get_bgem3_sparse_encoder, _get_cross_encoder_reranker, _get_minio_client
 

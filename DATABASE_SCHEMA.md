@@ -4,13 +4,27 @@ This document contains the Entity-Relationship mapping for the local PostgreSQL 
 
 ```mermaid
 erDiagram
-    %% Identity & Courses
+    %% 0. Lookup / Reference Tables
+    output_formats {
+        UUID id PK
+        string name UK
+        string description
+        datetime created_at
+    }
+
+    tip_categories {
+        UUID id PK
+        string name UK
+        datetime created_at
+    }
+
+    %% 1. Identity & Courses
     users {
         UUID id PK
         string email UK
         string first_name
         string last_name
-        string role "Student, Professor, Admin"
+        enum role "Student, Professor, Admin"
         string hashed_password
         datetime created_at
         datetime updated_at
@@ -25,7 +39,7 @@ erDiagram
         datetime updated_at
     }
 
-    %% Knowledge Base
+    %% 2. Knowledge Base
     materials {
         UUID id PK
         UUID course_id FK "Ref: courses.id"
@@ -37,7 +51,7 @@ erDiagram
         datetime created_at
     }
 
-    %% Chat System
+    %% 3. Chat System
     conversations {
         UUID id PK
         UUID user_id FK "Ref: users.id"
@@ -50,9 +64,9 @@ erDiagram
     messages {
         UUID id PK
         UUID conversation_id FK "Ref: conversations.id"
-        string sender "User, System, AI"
-        string content
-        string output_type_requested
+        enum sender "User, System, AI"
+        text content
+        UUID output_format_id FK "Ref: output_formats.id"
         datetime created_at
     }
 
@@ -72,41 +86,43 @@ erDiagram
         datetime created_at
     }
 
-    %% Configuration & Preferences
+    %% 4. Configuration & Prompts
     system_prompts {
         UUID id PK
         UUID author_id FK "Ref: users.id"
         string title
-        string content
+        text content
         datetime created_at
     }
 
     llm_tips {
         UUID id PK
+        UUID category_id FK "Ref: tip_categories.id"
         string title
-        string description
-        string example_prompt
-        string category
+        text description
+        text example_prompt
         datetime created_at
     }
 
-    %% Relationships (Restructured for better layout)
+    %% Relationships
     %% Identity & Setup
-    users ||--o{ courses : "creates"
-    
+    users ||--o{ courses : "held_by"
+    users ||--o{ materials : "uploaded_by"
+    users ||--o{ conversations : "participates_in"
+    users ||--o{ system_prompts : "authored_by"
+
     %% Course Data
     courses ||--o{ materials : "contains"
-    materials }o--|| users : "uploaded_by"
-    
-    system_prompts }o--|| users : "authored_by"
-
-    %% Chat System Sub-graph
     courses ||--o{ conversations : "context_for"
-    users ||--o{ conversations : "participates_in"
-    
+
+    %% Chat System
     conversations ||--o{ messages : "contains"
     conversations ||--o| shared_links : "generates"
     messages ||--o{ attachments : "includes"
+    messages }o--o| output_formats : "requested_format"
+
+    %% Tips
+    tip_categories ||--o{ llm_tips : "categorises"
 ```
 
 ## Class Diagram
@@ -115,12 +131,25 @@ This diagram visualizes the Object-Oriented mapping used by SQLModel (and FastAP
 
 ```mermaid
 classDiagram
+    class OutputFormat {
+        +UUID id
+        +String name
+        +String description
+        +DateTime created_at
+    }
+
+    class TipCategory {
+        +UUID id
+        +String name
+        +DateTime created_at
+    }
+
     class User {
         +UUID id
         +String email
         +String first_name
         +String last_name
-        +String role
+        +UserRole role
         +String hashed_password
         +DateTime created_at
         +DateTime updated_at
@@ -158,9 +187,9 @@ classDiagram
     class Message {
         +UUID id
         +UUID conversation_id
-        +String sender
-        +String content
-        +String output_type_requested
+        +MessageSender sender
+        +Text content
+        +UUID output_format_id
         +DateTime created_at
     }
 
@@ -184,16 +213,16 @@ classDiagram
         +UUID id
         +UUID author_id
         +String title
-        +String content
+        +Text content
         +DateTime created_at
     }
 
     class LlmTip {
         +UUID id
+        +UUID category_id
         +String title
-        +String description
-        +String example_prompt
-        +String category
+        +Text description
+        +Text example_prompt
         +DateTime created_at
     }
 
@@ -201,15 +230,18 @@ classDiagram
     User "1" --> "*" Course : creates
     User "1" --> "*" SystemPrompt : authors
     User "1" --> "*" Material : uploads
-    User "1" --> "*" Conversation : participates 
-    
+    User "1" --> "*" Conversation : participates
+
     Course "1" *-- "*" Material : contains
-    Course "1" *-- "*" SystemPrompt : configures
     Course "1" <-- "*" Conversation : references
-    n "1" *-- "*" Message : owns
+
+    Conversation "1" *-- "*" Message : owns
     Conversation "1" *-- "0..1" SharedLink : generates
-    
+
     Message "1" *-- "*" Attachment : includes
+    Message "*" --> "0..1" OutputFormat : requests
+
+    TipCategory "1" *-- "*" LlmTip : categorises
 ```
 
 ## Object Diagram (Example State)
@@ -237,9 +269,9 @@ classDiagram
         <<Course>>
         id: c382901a...
         title: "Introduction to AI"
-        created_by: 7f1a3b10...
+        held_by: 7f1a3b10...
     }
-hel
+
     class lecture_slides {
         <<Material>>
         id: 9d123bca...
@@ -255,13 +287,14 @@ hel
         user_id: 4b29c122...
         course_id: c382901a...
     }
-    
+
     class current_message {
         <<Message>>
         id: 28bc9910...
         conversation_id: 11eeb229...
         sender: "User"
         content: "Can you explain backpropagation?"
+        output_format_id: null
     }
 
     class user_attachment {
@@ -271,14 +304,28 @@ hel
         file_name: "my_notes.docx"
     }
 
+    class markdown_format {
+        <<OutputFormat>>
+        id: a1b2c3d4...
+        name: "markdown"
+        description: "Render response as Markdown"
+    }
+
+    class general_tips {
+        <<TipCategory>>
+        id: f9e8d7c6...
+        name: "General"
+    }
+
     %% Object Links
     professor_john ..> ai_course : creates
     professor_john ..> lecture_slides : uploads
     ai_course *-- lecture_slides : contains
-    
+
     student_jane ..> jane_conversation : participates
     jane_conversation ..> ai_course : context
-    
+
     jane_conversation *-- current_message : owns
     current_message *-- user_attachment : contains
+    current_message ..> markdown_format : requests
 ```
