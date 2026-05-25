@@ -62,13 +62,16 @@ def _get_qdrant_client() -> QdrantClient:
     )
 
 
-def get_vector_db_client(
-    app: AppSettings = Depends(get_app_settings),
-) -> VectorDBInterface:
-    """Yields the configured Vector Database client."""
+def select_vector_db_client() -> VectorDBInterface:
+    app = get_app_settings()
     if app.VECTOR_DB_CLIENT_TYPE == "qdrant":
         return _get_qdrant_client()
     raise ValueError(f"Unsupported Vector Database type: {app.VECTOR_DB_CLIENT_TYPE}")
+
+
+def get_vector_db_client() -> VectorDBInterface:
+    """Yields the configured Vector Database client."""
+    return select_vector_db_client()
 
 
 @lru_cache()
@@ -82,11 +85,16 @@ def _get_openai_llm_client() -> OpenAILLMClient:
     )
 
 
-def get_llm_client(app: AppSettings = Depends(get_app_settings)) -> LLMInterface:
-    """Yields the configured LLM client. Typed against the ABC interface."""
+def select_llm_client() -> LLMInterface:
+    app = get_app_settings()
     if app.LLM_CLIENT_TYPE == "openai":
         return _get_openai_llm_client()
     raise ValueError(f"Unsupported LLM Client type: {app.LLM_CLIENT_TYPE}")
+
+
+def get_llm_client() -> LLMInterface:
+    """Yields the configured LLM client. Typed against the ABC interface."""
+    return select_llm_client()
 
 
 @lru_cache()
@@ -98,13 +106,16 @@ def _get_ollama_embedding_client() -> OllamaEmbeddingClient:
     )
 
 
-def get_embedding_client(
-    app: AppSettings = Depends(get_app_settings),
-) -> EmbeddingInterface:
-    """Yields the configured Embedding client. Typed against the ABC interface."""
+def select_embedding_client() -> EmbeddingInterface:
+    app = get_app_settings()
     if app.EMBEDDING_CLIENT_TYPE == "ollama":
         return _get_ollama_embedding_client()
     raise ValueError(f"Unsupported Embedding Client type: {app.EMBEDDING_CLIENT_TYPE}")
+
+
+def get_embedding_client() -> EmbeddingInterface:
+    """Yields the configured Embedding client. Typed against the ABC interface."""
+    return select_embedding_client()
 
 
 @lru_cache()
@@ -135,27 +146,29 @@ def _get_text_splitter() -> LangChainRecursiveSplitterClient:
     )
 
 
+def select_text_splitter() -> TextSplitterInterface:
+    return _get_text_splitter()
+
+
 def get_text_splitter() -> TextSplitterInterface:
     """Yields the configured text splitter."""
     return _get_text_splitter()
 
 
-def get_object_storage_client(
-    app: AppSettings = Depends(get_app_settings),
-) -> ObjectStorageInterface:
-    """Yields the configured Object Storage client."""
+def select_object_storage_client() -> ObjectStorageInterface:
+    app = get_app_settings()
     if app.OBJECT_STORAGE_CLIENT_TYPE == "minio":
         return _get_minio_client()
-    raise ValueError(
-        f"Unsupported Object Storage type: {app.OBJECT_STORAGE_CLIENT_TYPE}"
-    )
+    raise ValueError(f"Unsupported Object Storage type: {app.OBJECT_STORAGE_CLIENT_TYPE}")
 
 
-@lru_cache()
-def _get_async_engine() -> AsyncEngine:
-    """Caches the SQLAlchemy/SQLModel AsyncEngine. Created once per application lifecycle."""
+def get_object_storage_client() -> ObjectStorageInterface:
+    """Yields the configured Object Storage client."""
+    return select_object_storage_client()
+
+
+def _make_engine(pool_size: int, max_overflow: int) -> AsyncEngine:
     settings = PostgresSettings()  # type: ignore
-
     database_url = URL.create(
         drivername="postgresql+asyncpg",
         username=settings.POSTGRES_USER,
@@ -164,15 +177,26 @@ def _get_async_engine() -> AsyncEngine:
         port=settings.POSTGRES_PORT,
         database=settings.POSTGRES_DB,
     )
-
     return create_async_engine(
         database_url,
         echo=False,
         pool_pre_ping=True,
-        pool_size=5,
-        max_overflow=50,
+        pool_size=pool_size,
+        max_overflow=max_overflow,
         connect_args={"ssl": settings.POSTGRES_SSL},
     )
+
+
+@lru_cache()
+def _get_async_engine() -> AsyncEngine:
+    """Caches the SQLAlchemy/SQLModel AsyncEngine. Created once per application lifecycle."""
+    return _make_engine(pool_size=5, max_overflow=50)
+
+
+@lru_cache()
+def get_worker_db_engine() -> AsyncEngine:
+    """Caches a smaller-pool engine for the ARQ worker process."""
+    return _make_engine(pool_size=3, max_overflow=10)
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
@@ -265,15 +289,18 @@ def _get_bgem3_sparse_encoder() -> BGEM3SparseEncoder:
     return BGEM3SparseEncoder(model_name=settings.BGEM3_MODEL)
 
 
-def get_sparse_encoder(
-    app: AppSettings = Depends(get_app_settings),
-) -> SparseEncoderInterface:
-    """Yields the configured sparse encoder. Typed against the ABC interface."""
+def select_sparse_encoder() -> SparseEncoderInterface:
+    app = get_app_settings()
     if app.SPARSE_ENCODER_CLIENT_TYPE == "bge-m3":
         return _get_bgem3_sparse_encoder()
     if app.SPARSE_ENCODER_CLIENT_TYPE == "bm25":
         return _get_bm25_sparse_encoder()
     raise ValueError(f"Unsupported sparse encoder type: {app.SPARSE_ENCODER_CLIENT_TYPE}")
+
+
+def get_sparse_encoder() -> SparseEncoderInterface:
+    """Yields the configured sparse encoder. Typed against the ABC interface."""
+    return select_sparse_encoder()
 
 
 @lru_cache()
@@ -289,11 +316,16 @@ def _get_cross_encoder_reranker() -> CrossEncoderReranker:
     return CrossEncoderReranker(model_name=settings.CROSS_ENCODER_MODEL)
 
 
-def get_reranker(app: AppSettings = Depends(get_app_settings)) -> RerankerInterface:
-    """Yields the configured reranker. Typed against the ABC interface."""
+def select_reranker() -> RerankerInterface:
+    app = get_app_settings()
     if app.RERANKER_CLIENT_TYPE == "cross-encoder":
         return _get_cross_encoder_reranker()
     raise ValueError(f"Unsupported reranker type: {app.RERANKER_CLIENT_TYPE}")
+
+
+def get_reranker() -> RerankerInterface:
+    """Yields the configured reranker. Typed against the ABC interface."""
+    return select_reranker()
 
 
 def get_chat_service(

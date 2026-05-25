@@ -1,32 +1,34 @@
 import asyncio
 import logging
 import uuid
-from functools import lru_cache
 
 from arq.connections import RedisSettings as ArqRedisSettings
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
-from sqlalchemy.engine import URL
+from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import (
     RedisSettings,
-    QdrantSettings,
-    OllamaSettings,
-    MinIOSettings,
-    PostgresSettings,
-    ChunkingSettings,
     MATERIALS_BUCKET,
     QDRANT_MATERIALS_COLLECTION,
 )
-from app.data_access.clients.qdrant_client import QdrantClient
-from app.data_access.clients.embedding_client import OllamaEmbeddingClient
-from app.data_access.clients.minio_client import MinIOClient
-from app.data_access.clients.langchain_splitter_client import LangChainRecursiveSplitterClient
+from app.data_access.interfaces.embedding import EmbeddingInterface
+from app.data_access.interfaces.object_storage import ObjectStorageInterface
+from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
+from app.data_access.interfaces.text_splitter import TextSplitterInterface
+from app.data_access.interfaces.vector_db import VectorDBInterface
+from app.core.providers import (
+    get_worker_embed,
+    get_worker_engine,
+    get_worker_object_storage,
+    get_worker_sparse_encoder,
+    get_worker_text_splitter,
+    get_worker_vector_db,
+)
 
-from app.schemas.course_schemas import Course  
-from app.schemas.user_schemas import User  
+from app.schemas.course_schemas import Course
+from app.schemas.user_schemas import User
 from app.schemas.chat_schemas import Conversation, Message, Attachment, SharedLink  # noqa: F401
-from app.schemas.admin_schemas import SystemPrompt, LlmTip 
+from app.schemas.admin_schemas import SystemPrompt, LlmTip
 from app.schemas.knowledge_schemas import Material, IngestionStatus
 
 from app.workers.ingestion_worker import extract_text_from_pdf, create_document_chunks
@@ -34,75 +36,29 @@ from app.workers.ingestion_worker import extract_text_from_pdf, create_document_
 logger = logging.getLogger(__name__)
 
 
-@lru_cache()
-def _worker_qdrant_client() -> QdrantClient:
-    s = QdrantSettings()  # type: ignore
-    return QdrantClient(endpoint=s.QDRANT_ENDPOINT, api_key=s.QDRANT_API_KEY)
-
-
-@lru_cache()
-def _worker_embedding_client() -> OllamaEmbeddingClient:
-    s = OllamaSettings()  # type: ignore
-    return OllamaEmbeddingClient(host=s.OLLAMA_HOST, model_name=s.OLLAMA_EMBED_MODEL)
-
-
-@lru_cache()
-def _worker_minio_client() -> MinIOClient:
-    s = MinIOSettings()  # type: ignore
-    return MinIOClient(
-        endpoint_url=s.MINIO_ENDPOINT,
-        access_key=s.MINIO_USER,
-        secret_key=s.MINIO_PASSWORD,
-        use_ssl=s.MINIO_USE_SSL,
-    )
-
-
-@lru_cache()
-def _worker_text_splitter() -> LangChainRecursiveSplitterClient:
-    s = ChunkingSettings()  # type: ignore
-    return LangChainRecursiveSplitterClient(
-        chunk_size=s.CHUNK_SIZE, chunk_overlap=s.CHUNK_OVERLAP
-    )
-
-
-@lru_cache()
-def _worker_db_engine() -> AsyncEngine:
-    s = PostgresSettings()  # type: ignore
-    url = URL.create(
-        drivername="postgresql+asyncpg",
-        username=s.POSTGRES_USER,
-        password=s.POSTGRES_PASSWORD,
-        host=s.POSTGRES_HOST,
-        port=s.POSTGRES_PORT,
-        database=s.POSTGRES_DB,
-    )
-    return create_async_engine(
-        url,
-        echo=False,
-        pool_pre_ping=True,
-        pool_size=3,
-        max_overflow=10,
-        connect_args={"ssl": s.POSTGRES_SSL},
-    )
-
-
 async def startup(ctx: dict) -> None:
     logger.info("ARQ worker starting up...")
-    minio = _worker_minio_client()
-    await minio.connect()
-    ctx["minio"] = minio
-    ctx["qdrant"] = _worker_qdrant_client()
-    ctx["embed"] = _worker_embedding_client()
-    ctx["splitter"] = _worker_text_splitter()
-    ctx["engine"] = _worker_db_engine()
+
+    object_storage: ObjectStorageInterface = get_worker_object_storage()
+    await object_storage.connect()
+    ctx["object_storage"] = object_storage
+    ctx["vector_db"] = get_worker_vector_db()
+    ctx["embed"] = get_worker_embed()
+    ctx["splitter"] = get_worker_text_splitter()
+
+    logger.info("Loading sparse encoder model (downloads ~570MB on first run)...")
+    ctx["sparse_encoder"] = await asyncio.to_thread(get_worker_sparse_encoder)
+    logger.info("Sparse encoder ready.")
+
+    ctx["engine"] = get_worker_engine()
     logger.info("ARQ worker clients ready.")
 
 
 async def shutdown(ctx: dict) -> None:
     logger.info("ARQ worker shutting down...")
-    minio: MinIOClient = ctx.get("minio")
-    if minio:
-        await minio.close()
+    object_storage: ObjectStorageInterface = ctx.get("object_storage")
+    if object_storage:
+        await object_storage.close()
     engine: AsyncEngine = ctx.get("engine")
     if engine:
         await engine.dispose()
@@ -116,10 +72,11 @@ async def process_pdf_task(
     filename: str,
 ) -> dict:
     mat_uuid = uuid.UUID(material_id)
-    minio: MinIOClient = ctx["minio"]
-    qdrant: QdrantClient = ctx["qdrant"]
-    embed: OllamaEmbeddingClient = ctx["embed"]
-    splitter: LangChainRecursiveSplitterClient = ctx["splitter"]
+    object_storage: ObjectStorageInterface = ctx["object_storage"]
+    vector_db: VectorDBInterface = ctx["vector_db"]
+    embed: EmbeddingInterface = ctx["embed"]
+    splitter: TextSplitterInterface = ctx["splitter"]
+    sparse_encoder: SparseEncoderInterface = ctx["sparse_encoder"]
     engine: AsyncEngine = ctx["engine"]
 
     async with AsyncSession(engine, expire_on_commit=False) as session:
@@ -135,7 +92,7 @@ async def process_pdf_task(
         collection_name = QDRANT_MATERIALS_COLLECTION
         vectors_written = False
         try:
-            content = await minio.download_file(MATERIALS_BUCKET, object_storage_key)
+            content = await object_storage.download_file(MATERIALS_BUCKET, object_storage_key)
 
             full_text = await asyncio.to_thread(extract_text_from_pdf, content)
             if not full_text.strip():
@@ -153,12 +110,13 @@ async def process_pdf_task(
             if len(vectors) != len(domain_chunks):
                 raise ValueError("Number of embeddings does not match number of text chunks.")
 
+            sparse_vectors = await sparse_encoder.encode_passages(text_chunks)
+
             vector_size = len(vectors[0])
-            await qdrant.create_collection(collection_name, vector_size, sparse=False)
-            await qdrant.upsert_chunks(collection_name, domain_chunks, vectors)
+            await vector_db.create_collection(collection_name, vector_size, sparse=True)
+            await vector_db.upsert_chunks(collection_name, domain_chunks, vectors, sparse_vectors=sparse_vectors)
             vectors_written = True
 
-            await session.refresh(material)
             material.ingestion_status = IngestionStatus.COMPLETED
             material.vector_namespace = collection_name
             material.ingestion_error = None
@@ -171,16 +129,18 @@ async def process_pdf_task(
             logger.error(f"Ingestion failed for material {material_id}: {exc}", exc_info=True)
             if vectors_written:
                 try:
-                    await qdrant.delete_chunks_by_source(collection_name, filename)
+                    await vector_db.delete_chunks_by_source(collection_name, filename)
                 except Exception as rb_err:
                     logger.warning(f"Vector rollback failed for {material_id}: {rb_err}")
 
-            await session.refresh(material)
             material.ingestion_status = IngestionStatus.FAILED
             material.ingestion_error = str(exc)[:2048]
             session.add(material)
             await session.commit()
             raise
+
+
+_redis_settings = RedisSettings()
 
 
 class WorkerSettings:
@@ -191,6 +151,6 @@ class WorkerSettings:
     job_timeout = 600
     max_tries = 3
     redis_settings = ArqRedisSettings(
-        host=RedisSettings().REDIS_HOST,
-        port=RedisSettings().REDIS_PORT,
+        host=_redis_settings.REDIS_HOST,
+        port=_redis_settings.REDIS_PORT,
     )

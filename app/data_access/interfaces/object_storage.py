@@ -10,6 +10,12 @@ class ObjectStorageInterface(ABC):
     All methods are async. Implementations must never block the event loop.
     """
 
+    async def connect(self) -> None:
+        """Establish any long-lived connections. No-op for stateless clients."""
+
+    async def close(self) -> None:
+        """Release any open connections. No-op for stateless clients."""
+
     @abstractmethod
     async def create_bucket(self, bucket_name: str) -> bool:
         """

@@ -39,6 +39,8 @@ class FileService:
         object_key = build_object_key(course_id, filename)
 
         uploaded = False
+        material_committed = False
+        material: Material | None = None
         try:
             await self.object_storage.upload_file(
                 MATERIALS_BUCKET, object_key, content, "application/pdf"
@@ -57,6 +59,7 @@ class FileService:
             self.db.add(material)
             await self.db.commit()
             await self.db.refresh(material)
+            material_committed = True
 
             await self.arq_pool.enqueue_job(
                 "process_pdf_task",
@@ -68,6 +71,14 @@ class FileService:
             return MaterialPublic.model_validate(material)
 
         except Exception:
+            if material_committed and material is not None:
+                try:
+                    await self.db.delete(material)
+                    await self.db.commit()
+                except Exception as db_err:
+                    logger.warning(
+                        f"Failed to clean up orphaned material record '{material.id}': {db_err}"
+                    )
             if uploaded:
                 try:
                     await self.object_storage.delete_file(MATERIALS_BUCKET, object_key)
