@@ -72,5 +72,10 @@ class ChunkingSettings(_Base):
     CHUNK_OVERLAP: int = 100
 
 
+class ExecutorSettings(_Base):
+    """Controls the ThreadPoolExecutor used for background document ingestion."""
+    INGESTION_MAX_WORKERS: int = 4
+
+
 MINIO_MATERIALS_BUCKET = "materials"
 QDRANT_MATERIALS_COLLECTION = "university_library"

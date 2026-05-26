@@ -1,5 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 import uuid
 from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
 from app.data_access.clients.bm25_client import BM25SparseEncoder
@@ -42,6 +43,8 @@ from app.services.file_service import FileService
 
 from app.data_access.interfaces.text_splitter import TextSplitterInterface
 from app.data_access.clients.langchain_splitter_client import LangChainRecursiveSplitterClient
+from app.data_access.clients.markdown_splitter_client import MarkdownSplitterClient
+from docling.document_converter import DocumentConverter
 
 @lru_cache()
 def get_app_settings() -> AppSettings:
@@ -134,6 +137,39 @@ def _get_text_splitter() -> LangChainRecursiveSplitterClient:
 def get_text_splitter() -> TextSplitterInterface:
     """Yields the configured text splitter."""
     return _get_text_splitter()
+
+
+@lru_cache()
+def _get_markdown_splitter() -> MarkdownSplitterClient:
+    """Caches the Markdown-aware splitter (used by the Docling ingestion pipeline)."""
+    chunking_settings = get_chunking_settings()
+    return MarkdownSplitterClient(
+        chunk_size=chunking_settings.CHUNK_SIZE,
+        chunk_overlap=chunking_settings.CHUNK_OVERLAP,
+    )
+
+
+def get_markdown_splitter() -> TextSplitterInterface:
+    """Yields the Markdown-aware text splitter."""
+    return _get_markdown_splitter()
+
+
+@lru_cache()
+def _get_docling_converter() -> DocumentConverter:
+    """Instantiates Docling's DocumentConverter exactly once.
+
+    DocumentConverter loads OCR + layout models on first call.
+    It is stateless and thread-safe for concurrent convert() calls on distinct file paths.
+    """
+    return DocumentConverter()
+
+
+def get_executor(request: Request) -> ThreadPoolExecutor:
+    """Returns the app-level ThreadPoolExecutor stored on app.state.
+
+    Must be called from a request context — app.state is populated during lifespan.
+    """
+    return request.app.state.executor
 
 
 def get_object_storage_client(
@@ -313,18 +349,17 @@ def get_chat_service(
 
 
 def get_file_service(
-    vector_db: VectorDBInterface = Depends(get_vector_db_client),
-    embed_client: EmbeddingInterface = Depends(get_embedding_client),
     object_storage: ObjectStorageInterface = Depends(get_object_storage_client),
-    sparse_encoder: SparseEncoderInterface = Depends(get_sparse_encoder),
-    text_splitter: TextSplitterInterface = Depends(get_text_splitter),
     db: AsyncSession = Depends(get_db_session),
+    executor: ThreadPoolExecutor = Depends(get_executor),
 ) -> FileService:
+    """Constructs FileService with only what the upload path needs.
+
+    The background ingestion thread resolves all heavy clients (embeddings, vector DB,
+    MinIO download) by itself — they must not be shared across event loops.
+    """
     return FileService(
-        vector_db=vector_db, 
-        embed_client=embed_client, 
         object_storage=object_storage,
-        sparse_encoder=sparse_encoder,
-        text_splitter=text_splitter,
-        db=db
+        db=db,
+        executor=executor,
     )
