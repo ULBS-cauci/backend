@@ -93,9 +93,9 @@ class CourseService:
                 await self.object_storage.delete_file(
                     MINIO_MATERIALS_BUCKET, material.object_storage_key
                 )
-            if material.vector_namespace and material.file_name:
+            if material.vector_namespace and material.object_storage_key:
                 await self.vector_db.delete_chunks_by_source(
-                    material.vector_namespace, material.file_name
+                    material.vector_namespace, material.object_storage_key
                 )
             await self.db.delete(material)
         await self.db.flush()

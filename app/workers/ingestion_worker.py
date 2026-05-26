@@ -64,12 +64,14 @@ def extract_text_with_docling(
             tmp.write(content)
             tmp_path = tmp.name
 
+        logger.info("[docling] converting '%s' (%d bytes) ...", filename, len(content))
         result = converter.convert(tmp_path)
         markdown: str = result.document.export_to_markdown()
 
         if not markdown.strip():
             raise ValueError(f"Document '{filename}' contains no extractable text.")
 
+        logger.info("[docling] '%s' → %d chars of Markdown.", filename, len(markdown))
         return markdown
     finally:
         if tmp_path and os.path.exists(tmp_path):
@@ -78,25 +80,31 @@ def extract_text_with_docling(
 
 def create_document_chunks(
     text_chunks: List[str],
-    filename: str,
+    source: str,
 ) -> List[DocumentChunk]:
     """Map a list of text strings to DocumentChunk objects.
 
-    Each chunk receives a fresh UUID and a metadata dict carrying the source filename,
+    Each chunk receives a fresh UUID and a metadata dict carrying the source key,
     which is used later for targeted vector deletion.
 
     Args:
         text_chunks: List of text strings produced by the text splitter.
-        filename:    Source filename stored in each chunk's metadata.
+        source:      Unique identifier stored in each chunk's metadata — should be the
+                     object_storage_key (e.g. ``<course_id>/<uuid>_filename.pdf``) so
+                     that rollback deletions are scoped to this exact upload and never
+                     accidentally remove chunks from a different material with the same
+                     filename.
 
     Returns:
         List of DocumentChunk objects ready for embedding and upsert.
     """
-    return [
+    chunks = [
         DocumentChunk(
             id=uuid.uuid4(),
             text=chunk,
-            metadata={"source": filename},
+            metadata={"source": source},
         )
         for chunk in text_chunks
     ]
+    logger.debug("[chunks] created %d DocumentChunks (source=%s)", len(chunks), source)
+    return chunks

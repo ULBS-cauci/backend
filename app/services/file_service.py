@@ -78,8 +78,18 @@ class FileService:
         course_id: uuid.UUID,
         user_id: uuid.UUID,
     ) -> MaterialPublic:
-        filename: str = file.filename or "unnamed_document"
+        filename: str = file.filename or ""
         suffix: str = Path(filename).suffix.lstrip(".").lower()
+
+        if not suffix:
+            # No extension in the filename — try to infer from the MIME type reported
+            # by the client (e.g. when file.filename is None or has no extension).
+            _ct_to_ext: dict[str, str] = {mime: ext for ext, mime in _MIME.items()}
+            suffix = _ct_to_ext.get(file.content_type or "", "")
+            if suffix:
+                filename = f"unnamed_document.{suffix}" if not filename else f"{filename}.{suffix}"
+            else:
+                filename = filename or "unnamed_document"
 
         if suffix not in _MIME:
             raise ValueError(
@@ -95,18 +105,29 @@ class FileService:
             MINIO_MATERIALS_BUCKET, object_key, content, content_type
         )
 
-        material = Material(
-            course_id=course_id,
-            file_name=filename,
-            file_type=suffix,
-            vector_namespace=QDRANT_MATERIALS_COLLECTION,
-            uploaded_by=user_id,
-            object_storage_key=object_key,
-            ingestion_status=IngestionStatus.PENDING,
-        )
-        self.db.add(material)
-        await self.db.commit()
-        await self.db.refresh(material)
+        try:
+            material = Material(
+                course_id=course_id,
+                file_name=filename,
+                file_type=suffix,
+                vector_namespace=QDRANT_MATERIALS_COLLECTION,
+                uploaded_by=user_id,
+                object_storage_key=object_key,
+                ingestion_status=IngestionStatus.PENDING,
+            )
+            self.db.add(material)
+            await self.db.commit()
+            await self.db.refresh(material)
+        except Exception:
+            # MinIO upload succeeded but DB write failed — delete the orphaned object.
+            try:
+                await self.object_storage.delete_file(MINIO_MATERIALS_BUCKET, object_key)
+            except Exception as del_err:
+                logger.warning(
+                    "[upload] MinIO cleanup failed for orphaned object '%s': %s",
+                    object_key, del_err,
+                )
+            raise
 
         # Fire-and-forget: submit to thread pool. Pass only plain string primitives —
         # no async objects may cross the event-loop boundary.
@@ -222,17 +243,21 @@ class FileService:
                     MINIO_MATERIALS_BUCKET, object_storage_key
                 )
 
-                markdown: str = await asyncio.to_thread(
-                    extract_text_with_docling, content, filename, converter
-                )
-                text_chunks: list[str] = await asyncio.to_thread(
-                    text_splitter.split_text, markdown
-                )
+                # extract_text_with_docling and split_text are both synchronous and
+                # CPU-bound. We are already running inside a ThreadPoolExecutor OS thread
+                # (via _run_ingestion_in_thread), so calling asyncio.to_thread() here
+                # would spawn additional threads unnecessarily — just call them directly.
+                markdown: str = extract_text_with_docling(content, filename, converter)
+                text_chunks: list[str] = text_splitter.split_text(markdown)
                 text_chunks = list(dict.fromkeys(text_chunks))
                 if not text_chunks:
                     raise ValueError("Text splitting produced no chunks.")
 
-                domain_chunks = create_document_chunks(text_chunks, filename)
+                # Use object_storage_key as the source identifier — it is unique per
+                # upload (contains a UUID) so rollback deletions are scoped to exactly
+                # this material and never affect chunks from a different upload with the
+                # same filename.
+                domain_chunks = create_document_chunks(text_chunks, object_storage_key)
 
                 dense_vectors = await embed_client.embed_batch(text_chunks)
                 if not dense_vectors:
@@ -269,7 +294,7 @@ class FileService:
                 if vectors_written:
                     try:
                         await vector_db.delete_chunks_by_source(
-                            QDRANT_MATERIALS_COLLECTION, filename
+                            QDRANT_MATERIALS_COLLECTION, object_storage_key
                         )
                     except Exception as rb_err:
                         logger.warning(
