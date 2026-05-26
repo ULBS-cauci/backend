@@ -43,15 +43,6 @@ async def get_ingestion_status(
     db: AsyncSession = Depends(get_db_session),
 ):
     """Poll the ingestion status of an uploaded document.
-
-    Returns the full MaterialPublic record including:
-    - ingestion_status: pending | running | completed | failed
-    - ingestion_error:  set when status=failed, null otherwise
-
-    Typical polling flow:
-        POST /files/upload          → { ingestion_status: "pending", id: "<uuid>", ... }
-        GET  /files/<uuid>/status   → { ingestion_status: "running",    ... }
-        GET  /files/<uuid>/status   → { ingestion_status: "completed",  ... }
     """
     material = await db.get(Material, material_id)
     if material is None:
