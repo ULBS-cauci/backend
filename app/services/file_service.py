@@ -82,8 +82,6 @@ class FileService:
         suffix: str = Path(filename).suffix.lstrip(".").lower()
 
         if not suffix:
-            # No extension in the filename — try to infer from the MIME type reported
-            # by the client (e.g. when file.filename is None or has no extension).
             _ct_to_ext: dict[str, str] = {mime: ext for ext, mime in _MIME.items()}
             suffix = _ct_to_ext.get(file.content_type or "", "")
             if suffix:
@@ -119,7 +117,6 @@ class FileService:
             await self.db.commit()
             await self.db.refresh(material)
         except Exception:
-            # MinIO upload succeeded but DB write failed — delete the orphaned object.
             try:
                 await self.object_storage.delete_file(MINIO_MATERIALS_BUCKET, object_key)
             except Exception as del_err:
@@ -129,8 +126,6 @@ class FileService:
                 )
             raise
 
-        # Fire-and-forget: submit to thread pool. Pass only plain string primitives —
-        # no async objects may cross the event-loop boundary.
         loop = asyncio.get_running_loop()
         loop.run_in_executor(
             self.executor,
@@ -176,7 +171,6 @@ class FileService:
         conflicts), MinIO client, embedding client, and Qdrant client.
         Reuses @lru_cache singletons for heavy ML models (thread-safe).
         """
-        # Import here to avoid circular imports at module level
         from app.api.dependencies import (
             _get_bgem3_sparse_encoder,
             _get_docling_converter,
@@ -243,20 +237,12 @@ class FileService:
                     MINIO_MATERIALS_BUCKET, object_storage_key
                 )
 
-                # extract_text_with_docling and split_text are both synchronous and
-                # CPU-bound. We are already running inside a ThreadPoolExecutor OS thread
-                # (via _run_ingestion_in_thread), so calling asyncio.to_thread() here
-                # would spawn additional threads unnecessarily — just call them directly.
                 markdown: str = extract_text_with_docling(content, filename, converter)
                 text_chunks: list[str] = text_splitter.split_text(markdown)
                 text_chunks = list(dict.fromkeys(text_chunks))
                 if not text_chunks:
                     raise ValueError("Text splitting produced no chunks.")
 
-                # Use object_storage_key as the source identifier — it is unique per
-                # upload (contains a UUID) so rollback deletions are scoped to exactly
-                # this material and never affect chunks from a different upload with the
-                # same filename.
                 domain_chunks = create_document_chunks(text_chunks, object_storage_key)
 
                 dense_vectors = await embed_client.embed_batch(text_chunks)
