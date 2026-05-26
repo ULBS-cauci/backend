@@ -44,7 +44,7 @@ import logging
 import random
 import secrets
 import uuid
-from typing import Any, TypeVar
+from typing import Any
 
 # ── app imports ───────────────────────────────────────────────────────────────
 # Import schema models directly — do NOT import from app.main (triggers lifespan
@@ -53,7 +53,7 @@ from sqlalchemy import text
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.dependencies import _get_async_engine
-from app.core.config import QDRANT_MATERIALS_COLLECTION
+from app.core.config import MINIO_MATERIALS_BUCKET, QDRANT_MATERIALS_COLLECTION
 
 from app.schemas.admin_schemas import LlmTip, SystemPrompt
 from app.schemas.chat_schemas import (
@@ -83,8 +83,6 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("fastembed").setLevel(logging.WARNING)
 logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 logging.getLogger("transformers").setLevel(logging.WARNING)
-
-M = TypeVar("M")
 
 # ── UploadFile shim ───────────────────────────────────────────────────────────
 
@@ -253,7 +251,7 @@ SEED_USERS: list[dict[str, Any]] = [
         "first_name": "Alice",
         "last_name": "Admin",
         "role": UserRole.ADMIN,
-        "hashed_password": hash_password("admin1234"),
+        "password": "admin1234",
     },
     {
         "id": SeedIDs.PROF,
@@ -262,7 +260,7 @@ SEED_USERS: list[dict[str, Any]] = [
         "first_name": "John",
         "last_name": "Smith",
         "role": UserRole.PROFESSOR,
-        "hashed_password": hash_password("prof1234"),
+        "password": "prof1234",
     },
     {
         "id": SeedIDs.STUDENT,
@@ -271,7 +269,7 @@ SEED_USERS: list[dict[str, Any]] = [
         "first_name": "Dummy",
         "last_name": "Student",
         "role": UserRole.STUDENT,
-        "hashed_password": hash_password("student1234"),
+        "password": "student1234",
     },
 ]
 
@@ -280,7 +278,7 @@ SEED_COURSES: list[dict[str, Any]] = [
     {
         "id": SeedIDs.DEV_COURSE,
         "title": "Dev Course",
-        "description": "Auto-created dev course for testing. Used by the file-upload endpoint.",
+        "description": "Auto-created dev course for testing.",
         "held_by": SeedIDs.STUDENT,  # mirrors get_dev_course() which uses current_user.id
     },
     # ── Professor courses ─────────────────────────────────────────────────────
@@ -602,7 +600,8 @@ def _pick_two_courses(all_courses: list[Course]) -> tuple[Course, Course]:
         raise RuntimeError(
             f"Need at least 2 professor courses to assign materials, got {len(eligible)}."
         )
-    return tuple(random.sample(eligible, 2))  # type: ignore[return-value]
+    course_a, course_b = random.sample(eligible, 2)
+    return course_a, course_b
 
 
 # ── seeder functions ──────────────────────────────────────────────────────────
@@ -610,7 +609,9 @@ def _pick_two_courses(all_courses: list[Course]) -> tuple[Course, Course]:
 async def seed_users(session: AsyncSession, dry_run: bool) -> list[User]:
     results: list[User] = []
     for data in SEED_USERS:
-        instance = User(**data)
+        user_data = dict(data)
+        user_data["hashed_password"] = hash_password(user_data.pop("password"))
+        instance = User(**user_data)
         saved = await _upsert(session, User, data["id"], instance, dry_run, "User")
         results.append(saved)
     return results
@@ -717,38 +718,42 @@ async def seed_materials_embed(
 
     minio = _get_minio_client()
     await minio.connect()
+    try:
+        await minio.create_bucket(MINIO_MATERIALS_BUCKET)
 
-    file_service = FileService(
-        vector_db=_get_qdrant_client(),
-        embed_client=_get_ollama_embedding_client(),
-        object_storage=minio,
-        sparse_encoder=sparse_encoder,
-        db=session,
-        chunking_settings=get_chunking_settings(),
-    )
-
-    results = []
-    for i, pdf_path in enumerate(pdf_files):
-        target_course = course_a if i % 2 == 0 else course_b
-        content = pdf_path.read_bytes()
-        upload_file = _SeederUploadFile(pdf_path.name, content)
-
-        logger.info(
-            "EMBED    %-40s → course '%s'", pdf_path.name, target_course.title
+        file_service = FileService(
+            vector_db=_get_qdrant_client(),
+            embed_client=_get_ollama_embedding_client(),
+            object_storage=minio,
+            sparse_encoder=sparse_encoder,
+            db=session,
+            chunking_settings=get_chunking_settings(),
         )
-        try:
-            # FileService does its own session.commit() per file — intentional.
-            material = await file_service.upload_and_index(
-                upload_file,         # type: ignore[arg-type]  — satisfies the duck-type contract
-                course_id=target_course.id,
-                user_id=SeedIDs.PROF,
-            )
-            logger.info("EMBEDDED %-40s id=%s", pdf_path.name, material.id)
-            results.append(material)
-        except Exception as exc:
-            logger.error("FAILED   %-40s — %s", pdf_path.name, exc)
 
-    return results
+        results = []
+        for i, pdf_path in enumerate(pdf_files):
+            target_course = course_a if i % 2 == 0 else course_b
+            content = pdf_path.read_bytes()
+            upload_file = _SeederUploadFile(pdf_path.name, content)
+
+            logger.info(
+                "EMBED    %-40s → course '%s'", pdf_path.name, target_course.title
+            )
+            try:
+                # FileService does its own session.commit() per file — intentional.
+                material = await file_service.upload_and_index(
+                    upload_file,         # type: ignore[arg-type]  — satisfies the duck-type contract
+                    course_id=target_course.id,
+                    user_id=SeedIDs.PROF,
+                )
+                logger.info("EMBEDDED %-40s id=%s", pdf_path.name, material.id)
+                results.append(material)
+            except Exception as exc:
+                logger.error("FAILED   %-40s — %s", pdf_path.name, exc)
+
+        return results
+    finally:
+        await minio.close()
 
 
 # ── material dispatcher ───────────────────────────────────────────────────────
@@ -886,7 +891,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--embed",
         nargs="?",
-        const="scripts/seed_materials",  # value when flag is present with no arg
+        const=str(_BACKEND_DIR / "scripts" / "seed_materials"),
         default=None,                     # value when flag is absent entirely
         metavar="FOLDER",
         help=(

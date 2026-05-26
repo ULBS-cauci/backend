@@ -17,11 +17,11 @@ class OllamaEmbeddingClient(EmbeddingInterface):
         """
         Embeds a single string using Ollama.
         """
-        response = await self.client.embeddings(
+        response = await self.client.embed(
             model=self.model_name,
-            prompt=text
+            input=text
         )
-        return response["embedding"]
+        return response.embeddings[0]
 
     async def embed_batch(self, texts: List[str]) -> List[List[float]]:
         """
