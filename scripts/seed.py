@@ -655,7 +655,7 @@ async def seed_materials_mock(
             id=mat_id,
             course_id=assigned_course.id,
             file_name=filename,
-            file_type="application/pdf",
+            file_type="pdf",
             vector_namespace=QDRANT_MATERIALS_COLLECTION,
             uploaded_by=SeedIDs.PROF,
             object_storage_key=None,  # DB record only
