@@ -37,7 +37,7 @@ async def upload_file(
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
-@router.get("/{material_id}/status", response_model=MaterialPublic)
+@router.get("/{material_id}/status", response_model=MaterialPublic, dependencies=[Depends(get_current_user)])
 async def get_ingestion_status(
     material_id: uuid.UUID,
     db: AsyncSession = Depends(get_db_session),

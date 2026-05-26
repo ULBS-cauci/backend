@@ -93,10 +93,11 @@ class CourseService:
                 await self.object_storage.delete_file(
                     MINIO_MATERIALS_BUCKET, material.object_storage_key
                 )
-            if material.vector_namespace and material.object_storage_key:
-                await self.vector_db.delete_chunks_by_source(
-                    material.vector_namespace, material.object_storage_key
-                )
+            if material.vector_namespace:
+                for source_key in filter(None, [material.object_storage_key, material.file_name]):
+                    await self.vector_db.delete_chunks_by_source(
+                        material.vector_namespace, source_key
+                    )
             await self.db.delete(material)
         await self.db.flush()
         course = await self.db.get(Course, course_id)

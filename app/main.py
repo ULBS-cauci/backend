@@ -66,7 +66,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         logger.info("Shutting down: waiting for in-flight ingestion tasks...")
-        executor.shutdown(wait=True)
+        await asyncio.to_thread(executor.shutdown, True)
         logger.info("ThreadPoolExecutor shut down cleanly.")
 
         await minio.close()
