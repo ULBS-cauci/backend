@@ -232,9 +232,7 @@ class FileService:
                 if not text_chunks:
                     raise ValueError("Text splitting produced no chunks.")
 
-                domain_chunks = await asyncio.to_thread(
-                    create_document_chunks, text_chunks, filename
-                )
+                domain_chunks = create_document_chunks(text_chunks, filename)
 
                 dense_vectors = await embed_client.embed_batch(text_chunks)
                 if not dense_vectors:

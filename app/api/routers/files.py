@@ -37,11 +37,6 @@ async def upload_file(
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
-class IngestionStatusResponse(MaterialPublic):
-    """MaterialPublic already carries ingestion_status + ingestion_error."""
-    pass
-
-
 @router.get("/{material_id}/status", response_model=MaterialPublic)
 async def get_ingestion_status(
     material_id: uuid.UUID,
