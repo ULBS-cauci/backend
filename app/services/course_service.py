@@ -50,6 +50,23 @@ class CourseService:
             output.append(display)
         return output
 
+    async def get_course_by_id(self, course_id: uuid.UUID) -> CourseDisplay | None:
+        stmt = (
+            select(Course, User)
+            .outerjoin(User, Course.held_by == User.id)
+            .where(Course.id == course_id)
+        )
+        result = await self.db.execute(stmt)
+        row = result.one_or_none()
+        if not row:
+            return None
+        course, user = row
+        display = CourseDisplay.model_validate(course)
+        if user:
+            display.teacher_name = f"{user.first_name} {user.last_name}"
+        return display
+    
+    
     async def create_course(
         self, course_data: CourseCreate, teacher_id: uuid.UUID
     ) -> Course:

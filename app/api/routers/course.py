@@ -46,9 +46,13 @@ async def upload_course_material(
     file: UploadFile = File(...),
     file_service: FileService = Depends(get_file_service),
     current_user: User = Depends(get_current_user),
+    course_service: CourseService = Depends(get_course_service)
 ):
     """Upload and index a PDF into the given course."""
     try:
+        course = await course_service.get_course_by_id(course_id)
+        if not course:
+            raise HTTPException(status_code=404, detail="Course not found")
         return await file_service.upload_and_index(
             file, course_id=course_id, user_id=current_user.id
         )
