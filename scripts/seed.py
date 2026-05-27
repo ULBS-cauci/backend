@@ -55,7 +55,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.api.dependencies import _get_async_engine
 from app.core.config import MINIO_MATERIALS_BUCKET, QDRANT_MATERIALS_COLLECTION
 
-from app.schemas.admin_schemas import LlmTip, SystemPrompt
+from app.schemas.admin_schemas import LlmTip, SystemPrompt, TipCategory
 from app.schemas.chat_schemas import (
     Attachment,  # noqa: F401 — imported so SQLModel registers the table
     Conversation,
@@ -183,6 +183,11 @@ class SeedIDs:
     TIP_4 = uuid.UUID("00000000-0000-0000-0000-000000000073")
     TIP_5 = uuid.UUID("00000000-0000-0000-0000-000000000074")
 
+    # ── Tip categories ────────────────────────────────────────────────────────
+    CAT_1 = uuid.UUID("00000000-0000-0000-0000-000000000080")  # Prompting Strategy
+    CAT_2 = uuid.UUID("00000000-0000-0000-0000-000000000081")  # Learning Technique
+    CAT_3 = uuid.UUID("00000000-0000-0000-0000-000000000082")  # Context Usage
+
 
 # ── reset: reverse FK order ───────────────────────────────────────────────────
 
@@ -190,10 +195,12 @@ _TRUNCATE_ORDER: list[str] = [
     "attachments",
     "shared_links",
     "messages",
+    "output_formats",   # referenced by messages.output_format_id
     "conversations",
     "materials",
     "system_prompts",
     "llm_tips",
+    "tip_categories",   # referenced by llm_tips.category_id
     "courses",
     "users",
 ]
@@ -432,7 +439,7 @@ SEED_MESSAGES: list[dict[str, Any]] = [
         "conversation_id": SeedIDs.CONV_1,
         "sender": MessageSender.USER,
         "content": "Can you explain what backpropagation is in neural networks?",
-        "output_type_requested": None,
+        "output_format_id": None,
     },
     {
         "id": SeedIDs.MSG_1_2,
@@ -444,14 +451,14 @@ SEED_MESSAGES: list[dict[str, Any]] = [
             "using the chain rule of calculus, then updates weights in the direction "
             "that reduces the loss."
         ),
-        "output_type_requested": None,
+        "output_format_id": None,
     },
     {
         "id": SeedIDs.MSG_1_3,
         "conversation_id": SeedIDs.CONV_1,
         "sender": MessageSender.USER,
         "content": "What is the vanishing gradient problem?",
-        "output_type_requested": None,
+        "output_format_id": None,
     },
     # ── Conversation 2: DSA course ────────────────────────────────────────────
     {
@@ -459,7 +466,7 @@ SEED_MESSAGES: list[dict[str, Any]] = [
         "conversation_id": SeedIDs.CONV_2,
         "sender": MessageSender.USER,
         "content": "How does quicksort partition the array?",
-        "output_type_requested": None,
+        "output_format_id": None,
     },
     {
         "id": SeedIDs.MSG_2_2,
@@ -470,14 +477,14 @@ SEED_MESSAGES: list[dict[str, Any]] = [
             "less than the pivot come before it and all greater elements come after. "
             "It then recursively sorts the two sub-arrays. Average case is O(n log n)."
         ),
-        "output_type_requested": None,
+        "output_format_id": None,
     },
     {
         "id": SeedIDs.MSG_2_3,
         "conversation_id": SeedIDs.CONV_2,
         "sender": MessageSender.USER,
         "content": "What is the worst case for quicksort and how can we avoid it?",
-        "output_type_requested": None,
+        "output_format_id": None,
     },
 ]
 
@@ -519,6 +526,21 @@ SEED_SYSTEM_PROMPTS: list[dict[str, Any]] = [
     },
 ]
 
+SEED_TIP_CATEGORIES: list[dict[str, Any]] = [
+    {
+        "id": SeedIDs.CAT_1,
+        "name": "Prompting Strategy",
+    },
+    {
+        "id": SeedIDs.CAT_2,
+        "name": "Learning Technique",
+    },
+    {
+        "id": SeedIDs.CAT_3,
+        "name": "Context Usage",
+    },
+]
+
 SEED_LLM_TIPS: list[dict[str, Any]] = [
     {
         "id": SeedIDs.TIP_1,
@@ -531,7 +553,7 @@ SEED_LLM_TIPS: list[dict[str, Any]] = [
             "I understand that backpropagation uses the chain rule, but I don't understand how "
             "the gradient flows backwards through a ReLU. Can you explain just that step?"
         ),
-        "category": "Prompting Strategy",
+        "category_id": SeedIDs.CAT_1,  # Prompting Strategy
     },
     {
         "id": SeedIDs.TIP_2,
@@ -543,7 +565,7 @@ SEED_LLM_TIPS: list[dict[str, Any]] = [
         "example_prompt": (
             "Can you walk me through quicksort step by step on the array [3, 1, 4, 1, 5, 9]?"
         ),
-        "category": "Prompting Strategy",
+        "category_id": SeedIDs.CAT_1,  # Prompting Strategy
     },
     {
         "id": SeedIDs.TIP_3,
@@ -555,7 +577,7 @@ SEED_LLM_TIPS: list[dict[str, Any]] = [
         "example_prompt": (
             "Can you explain the attention mechanism in transformers using a real-world analogy?"
         ),
-        "category": "Learning Technique",
+        "category_id": SeedIDs.CAT_2,  # Learning Technique
     },
     {
         "id": SeedIDs.TIP_4,
@@ -568,7 +590,7 @@ SEED_LLM_TIPS: list[dict[str, Any]] = [
             "Now that you have explained dynamic programming, give me a practice problem "
             "at medium difficulty."
         ),
-        "category": "Learning Technique",
+        "category_id": SeedIDs.CAT_2,  # Learning Technique
     },
     {
         "id": SeedIDs.TIP_5,
@@ -581,7 +603,7 @@ SEED_LLM_TIPS: list[dict[str, Any]] = [
             "Based on the Lecture 3 material on graph traversal, can you explain why BFS is "
             "preferred over DFS for shortest-path problems?"
         ),
-        "category": "Context Usage",
+        "category_id": SeedIDs.CAT_3,  # Context Usage
     },
 ]
 
@@ -707,7 +729,7 @@ async def seed_materials_embed(
         _get_minio_client,
         _get_ollama_embedding_client,
         _get_qdrant_client,
-        get_chunking_settings,
+        _get_text_splitter,
     )
     from app.services.file_service import FileService
 
@@ -727,7 +749,7 @@ async def seed_materials_embed(
             object_storage=minio,
             sparse_encoder=sparse_encoder,
             db=session,
-            chunking_settings=get_chunking_settings(),
+            text_splitter=_get_text_splitter(),
         )
 
         results = []
@@ -825,6 +847,17 @@ async def seed_system_prompts(
     return results
 
 
+async def seed_tip_categories(session: AsyncSession, dry_run: bool) -> list[TipCategory]:
+    results: list[TipCategory] = []
+    for data in SEED_TIP_CATEGORIES:
+        instance = TipCategory(**data)
+        saved = await _upsert(
+            session, TipCategory, data["id"], instance, dry_run, "TipCategory"
+        )
+        results.append(saved)
+    return results
+
+
 async def seed_llm_tips(session: AsyncSession, dry_run: bool) -> list[LlmTip]:
     results: list[LlmTip] = []
     for data in SEED_LLM_TIPS:
@@ -858,6 +891,7 @@ async def run_seed(
         await seed_messages(session, dry_run, conversations)
         await seed_shared_links(session, dry_run, conversations)
         await seed_system_prompts(session, dry_run, users)
+        await seed_tip_categories(session, dry_run)
         await seed_llm_tips(session, dry_run)
 
         if not dry_run:

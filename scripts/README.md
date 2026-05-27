@@ -1,6 +1,6 @@
 # Seed Materials Folder
 
-Place PDF files here to use with `python -m scripts.seed --embed`.
+Place PDF files in `scripts/seed_materials/` folder to use with `python -m scripts.seed --embed`.
 
 ## How it works
 
