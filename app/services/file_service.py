@@ -4,7 +4,7 @@ FileService: handles document upload and background indexing.
 Upload path (main event loop):
     1. Validate file extension
     2. Read bytes and upload to MinIO
-    3. Create Material DB record (ingestion_status=PENDING)
+    3. Create Material DB record
     4. Submit _run_ingestion_in_thread to the ThreadPoolExecutor (fire-and-forget)
     5. Return MaterialPublic immediately
 
@@ -14,7 +14,6 @@ Background path (OS thread → fresh asyncio event loop):
           Qdrant client — all fresh, bound to the new event loop.
         - Reuses @lru_cache singletons for Docling converter, BGE-M3 encoder,
           Markdown splitter (thread-safe, no event-loop affinity).
-        - Transitions Material: PENDING → RUNNING → COMPLETED | FAILED
 """
 import asyncio
 import logging
@@ -42,7 +41,7 @@ from app.data_access.clients.embedding_client import OllamaEmbeddingClient
 from app.data_access.clients.minio_client import MinIOClient
 from app.data_access.clients.qdrant_client import QdrantClient as QdrantVectorClient
 from app.data_access.interfaces.object_storage import ObjectStorageInterface
-from app.schemas.knowledge_schemas import IngestionStatus, Material, MaterialPublic
+from app.schemas.knowledge_schemas import Material, MaterialPublic
 from app.workers.ingestion_worker import create_document_chunks, extract_text_with_docling
 
 logger = logging.getLogger(__name__)
@@ -111,7 +110,6 @@ class FileService:
                 vector_namespace=QDRANT_MATERIALS_COLLECTION,
                 uploaded_by=user_id,
                 object_storage_key=object_key,
-                ingestion_status=IngestionStatus.PENDING,
             )
             self.db.add(material)
             await self.db.commit()
@@ -230,14 +228,13 @@ class FileService:
                     )
                     return
 
-                material.ingestion_status = IngestionStatus.RUNNING
-                await db.commit()
-
                 content: bytes = await minio.download_file(
                     MINIO_MATERIALS_BUCKET, object_storage_key
                 )
 
-                markdown: str = extract_text_with_docling(content, filename, converter)
+                markdown: str = await asyncio.to_thread(
+                    extract_text_with_docling, content, filename, converter
+                )
                 text_chunks: list[str] = text_splitter.split_text(markdown)
                 text_chunks = list(dict.fromkeys(text_chunks))
                 if not text_chunks:
@@ -265,9 +262,6 @@ class FileService:
                 )
                 vectors_written = True
 
-                await db.refresh(material)
-                material.ingestion_status = IngestionStatus.COMPLETED
-                await db.commit()
                 logger.info(
                     f"[ingestion] '{filename}' ({material_id_str}) completed successfully."
                 )
@@ -287,16 +281,6 @@ class FileService:
                             f"[ingestion] vector rollback failed for {material_id_str}: {rb_err}"
                         )
 
-                try:
-                    material = await db.get(Material, mat_id)
-                    if material:
-                        material.ingestion_status = IngestionStatus.FAILED
-                        material.ingestion_error = str(exc)[:500]
-                        await db.commit()
-                except Exception:
-                    logger.exception(
-                        f"[ingestion] could not write FAILED status for {material_id_str}"
-                    )
             finally:
                 await minio.close()
                 await engine.dispose()
