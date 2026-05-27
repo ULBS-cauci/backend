@@ -41,6 +41,28 @@ async def list_conversation_messages(
     messages = await service.get_conversation_messages(conversation_id=conversation_id)
     return messages
 
+@router.post("/{conversation_id}/regenerate")
+async def regenerate(
+    conversation_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    service: ChatService = Depends(get_chat_service),
+):
+    conversation = await service.get_conversation_for_user(
+        conversation_id=conversation_id, user_id=current_user.id
+    )
+    if not conversation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
+    async def event_stream():
+        async for chunk in service.regenerate_stream(
+            conversation_id=conversation_id,
+        ):
+            yield f"data: {json.dumps(chunk)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
 @router.post("/ask")
 async def ask(
     payload: MessageCreate,

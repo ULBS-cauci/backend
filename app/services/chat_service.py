@@ -104,6 +104,49 @@ class ChatService:
 
         await self._persist_message(conversation_id, MessageSender.AI, "".join(chunks))
 
+    async def regenerate_stream(
+        self,
+        conversation_id: uuid.UUID,
+    ) -> AsyncIterator[str]:
+        all_messages = await self.get_conversation_messages(conversation_id)
+
+        if not all_messages or all_messages[-1].sender != MessageSender.AI:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Last message is not an AI response; nothing to regenerate",
+            )
+        last_ai_msg = all_messages[-1]
+
+        last_user_msg = next(
+            (m for m in reversed(all_messages[:-1]) if m.sender == MessageSender.USER),
+            None,
+        )
+        if last_user_msg is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No user message found to regenerate from",
+            )
+
+        await self.db_session.delete(last_ai_msg)
+        await self.db_session.commit()
+
+        last_user_idx = next(i for i, m in enumerate(all_messages) if m.id == last_user_msg.id)
+        context_history = all_messages[:last_user_idx]
+        query = last_user_msg.content
+        llm_messages = await self._prepare_llm_messages(conversation_id, query, history=context_history)
+
+        conversation = await self.db_session.get(Conversation, conversation_id)
+        conversation.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        self.db_session.add(conversation)
+        await self.db_session.flush()
+
+        chunks: list[str] = []
+        async for chunk in self.llm_client.stream(llm_messages):
+            chunks.append(chunk)
+            yield chunk
+
+        await self._persist_message(conversation_id, MessageSender.AI, "".join(chunks))
+
     async def _get_or_create_conversation(
         self,
         user_id: uuid.UUID,
@@ -140,9 +183,11 @@ class ChatService:
         return condensed
 
     async def _prepare_llm_messages(
-        self, conversation_id: uuid.UUID, query: str
+        self, conversation_id: uuid.UUID, query: str,
+        history: Optional[List[Message]] = None,
     ) -> List[ChatMessage]:
-        history = await self.get_conversation_messages(conversation_id)
+        if history is None:
+            history = await self.get_conversation_messages(conversation_id)
         search_query = await self._condense_query(history, query)
 
         messages: List[ChatMessage] = [
