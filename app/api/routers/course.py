@@ -2,6 +2,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import StreamingResponse
 
 from app.api.dependencies import get_course_service, get_current_user, get_file_service
 from app.schemas.course_schemas import CourseCreate, CourseDisplay, CourseUpdate
@@ -55,6 +56,27 @@ async def upload_course_material(
     except Exception as e:
         logger.error("Error during material upload: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+@router.get("/{course_id}/materials/{material_id}/preview")
+async def preview_course_material(
+    course_id: uuid.UUID,
+    material_id: uuid.UUID,
+    file_service: FileService = Depends(get_file_service),
+) -> StreamingResponse:
+    result = await file_service.get_material_stream(course_id, material_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Material not found")
+    filename, stream = result
+    return StreamingResponse(
+        stream,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"',
+            "Cache-Control": "private, max-age=3600",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.post("/", response_model=CourseDisplay, status_code=status.HTTP_201_CREATED)

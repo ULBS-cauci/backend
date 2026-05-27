@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import AsyncGenerator, List, Optional
 
 
 class ObjectStorageInterface(ABC):
@@ -68,6 +68,24 @@ class ObjectStorageInterface(ABC):
             FileNotFoundError: If the object does not exist.
         """
         pass
+
+    @abstractmethod
+    async def stream_file(
+        self,
+        bucket_name: str,
+        object_key: str,
+        chunk_size: int = 65536,
+    ) -> AsyncGenerator[bytes, None]:
+        """
+        Yield the file's bytes in chunks without buffering the entire file in memory.
+        Prefer this over download_file for files served directly to a browser.
+
+        Args:
+            chunk_size: Bytes per chunk yielded to the caller (default 64 KiB).
+
+        Raises:
+            FileNotFoundError: If the object does not exist.
+        """
 
     @abstractmethod
     async def delete_file(self, bucket_name: str, object_key: str) -> bool:

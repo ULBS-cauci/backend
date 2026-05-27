@@ -42,4 +42,3 @@ class MaterialPublic(MaterialBase):
     uploaded_by: Optional[uuid.UUID]
     object_storage_key: Optional[str]
     created_at: datetime
-    preview_url: Optional[str] = None
