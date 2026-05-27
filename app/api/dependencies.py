@@ -41,6 +41,8 @@ from typing import AsyncGenerator
 
 from app.services.file_service import FileService
 
+from app.data_access.interfaces.text_splitter import TextSplitterInterface
+from app.data_access.clients.langchain_splitter_client import LangChainRecursiveSplitterClient
 
 @lru_cache()
 def get_app_settings() -> AppSettings:
@@ -128,6 +130,21 @@ def get_chunking_settings() -> ChunkingSettings:
 def get_ingestion_settings() -> IngestionSettings:
     """Caches the ingestion pipeline settings per application lifecycle."""
     return IngestionSettings()  # type: ignore
+
+  
+@lru_cache()
+def _get_text_splitter() -> LangChainRecursiveSplitterClient:
+    """Caches the text splitter per application lifecycle."""
+    chunking_settings = get_chunking_settings()
+    return LangChainRecursiveSplitterClient(
+        chunk_size=chunking_settings.CHUNK_SIZE,
+        chunk_overlap=chunking_settings.CHUNK_OVERLAP,
+    )
+
+
+def get_text_splitter() -> TextSplitterInterface:
+    """Yields the configured text splitter."""
+    return _get_text_splitter()
 
 
 def get_object_storage_client(
@@ -313,16 +330,16 @@ def get_file_service(
     embed_client: EmbeddingInterface = Depends(get_embedding_client),
     object_storage: ObjectStorageInterface = Depends(get_object_storage_client),
     sparse_encoder: SparseEncoderInterface = Depends(get_sparse_encoder),
+    text_splitter: TextSplitterInterface = Depends(get_text_splitter),
     db: AsyncSession = Depends(get_db_session),
-    chunking_settings: ChunkingSettings = Depends(get_chunking_settings),
     ingestion_settings: IngestionSettings = Depends(get_ingestion_settings),
 ) -> FileService:
     return FileService(
-        vector_db=vector_db,
-        embed_client=embed_client,
+        vector_db=vector_db, 
+        embed_client=embed_client, 
         object_storage=object_storage,
         sparse_encoder=sparse_encoder,
+        text_splitter=text_splitter,
         db=db,
-        chunking_settings=chunking_settings,
         ingestion_settings=ingestion_settings,
     )

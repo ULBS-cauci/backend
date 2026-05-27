@@ -7,7 +7,6 @@ import io
 import uuid
 from typing import List
 from pypdf import PdfReader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.schemas.vector_schemas import DocumentChunk
 
 
@@ -41,40 +40,6 @@ def extract_text_from_pdf(content: bytes) -> str:
         raise
     except Exception as e:
         raise ValueError(f"Failed to extract text from PDF: {str(e)}") from e
-
-
-def split_text_into_chunks(
-    text: str, chunk_size: int = 1000, chunk_overlap: int = 100
-) -> List[str]:
-    """
-    Synchronous function to split text into chunks.
-    Designed to run in a thread pool via asyncio.to_thread()
-
-    Args:
-        text: Full document text
-        chunk_size: Size of each chunk in characters
-        chunk_overlap: Overlap between chunks
-
-    Returns:
-        List of text chunks
-
-    Raises:
-        ValueError: If chunking fails
-    """
-    try:
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size, chunk_overlap=chunk_overlap
-        )
-        chunks = splitter.split_text(text)
-
-        if not chunks:
-            raise ValueError("Text splitting produced no chunks")
-
-        return chunks
-    except ValueError:
-        raise
-    except Exception as e:
-        raise ValueError(f"Failed to split text into chunks: {str(e)}") from e
 
 
 def create_document_chunks(
