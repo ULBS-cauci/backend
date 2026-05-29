@@ -20,8 +20,9 @@ import logging
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
+from docling.document_converter import DocumentConverter
 from fastapi import UploadFile
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -32,21 +33,19 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.config import (
     MINIO_MATERIALS_BUCKET,
     QDRANT_MATERIALS_COLLECTION,
-    MinIOSettings,
-    OllamaSettings,
     PostgresSettings,
-    QdrantSettings,
 )
-from app.data_access.clients.embedding_client import OllamaEmbeddingClient
-from app.data_access.clients.minio_client import MinIOClient
-from app.data_access.clients.qdrant_client import QdrantClient as QdrantVectorClient
+from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.data_access.interfaces.object_storage import ObjectStorageInterface
+from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
+from app.data_access.interfaces.text_splitter import TextSplitterInterface
+from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.schemas.knowledge_schemas import Material, MaterialPublic
 from app.workers.ingestion_worker import create_document_chunks, extract_text_with_docling
 
 logger = logging.getLogger(__name__)
 
-_MIME: dict[str, str] = {
+_CONTENT_TYPE_BY_EXTENSION: dict[str, str] = {
     "pdf":  "application/pdf",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -66,10 +65,22 @@ class FileService:
         object_storage: ObjectStorageInterface,
         db: AsyncSession,
         executor: ThreadPoolExecutor,
+        make_ingestion_object_storage: Callable[[], ObjectStorageInterface],
+        make_ingestion_embedding: Callable[[], EmbeddingInterface],
+        make_ingestion_vector_db: Callable[[], VectorDBInterface],
+        get_ingestion_sparse_encoder: Callable[[], SparseEncoderInterface],
+        get_ingestion_document_converter: Callable[[], DocumentConverter],
+        get_ingestion_text_splitter: Callable[[], TextSplitterInterface],
     ) -> None:
         self.object_storage = object_storage
         self.db = db
         self.executor = executor
+        self._make_object_storage = make_ingestion_object_storage
+        self._make_embedding = make_ingestion_embedding
+        self._make_vector_db = make_ingestion_vector_db
+        self._get_sparse_encoder = get_ingestion_sparse_encoder
+        self._get_document_converter = get_ingestion_document_converter
+        self._get_text_splitter = get_ingestion_text_splitter
 
     async def upload_and_index(
         self,
@@ -81,20 +92,20 @@ class FileService:
         suffix: str = Path(filename).suffix.lstrip(".").lower()
 
         if not suffix:
-            _ct_to_ext: dict[str, str] = {mime: ext for ext, mime in _MIME.items()}
+            _ct_to_ext: dict[str, str] = {mime: ext for ext, mime in _CONTENT_TYPE_BY_EXTENSION.items()}
             suffix = _ct_to_ext.get(file.content_type or "", "")
             if suffix:
                 filename = f"unnamed_document.{suffix}" if not filename else f"{filename}.{suffix}"
             else:
                 filename = filename or "unnamed_document"
 
-        if suffix not in _MIME:
+        if suffix not in _CONTENT_TYPE_BY_EXTENSION:
             raise ValueError(
                 f"Unsupported file type '.{suffix}'. "
-                f"Accepted: {', '.join(sorted(_MIME))}"
+                f"Accepted: {', '.join(sorted(_CONTENT_TYPE_BY_EXTENSION))}"
             )
 
-        content_type = _MIME[suffix]
+        content_type = _CONTENT_TYPE_BY_EXTENSION[suffix]
         content = await file.read()
         object_key = build_object_key(course_id, filename)
 
@@ -131,6 +142,12 @@ class FileService:
             str(material.id),
             object_key,
             filename,
+            self._make_object_storage,
+            self._make_embedding,
+            self._make_vector_db,
+            self._get_sparse_encoder,
+            self._get_document_converter,
+            self._get_text_splitter,
         )
 
         return MaterialPublic.model_validate(material)
@@ -140,6 +157,12 @@ class FileService:
         material_id_str: str,
         object_storage_key: str,
         filename: str,
+        make_object_storage: Callable[[], ObjectStorageInterface],
+        make_embedding: Callable[[], EmbeddingInterface],
+        make_vector_db: Callable[[], VectorDBInterface],
+        get_sparse_encoder: Callable[[], SparseEncoderInterface],
+        get_document_converter: Callable[[], DocumentConverter],
+        get_text_splitter: Callable[[], TextSplitterInterface],
     ) -> None:
         """Sync wrapper. Creates a fresh event loop via asyncio.run().
 
@@ -149,7 +172,17 @@ class FileService:
         """
         try:
             asyncio.run(
-                FileService._async_ingestion(material_id_str, object_storage_key, filename)
+                FileService._async_ingestion(
+                    material_id_str,
+                    object_storage_key,
+                    filename,
+                    make_object_storage,
+                    make_embedding,
+                    make_vector_db,
+                    get_sparse_encoder,
+                    get_document_converter,
+                    get_text_splitter,
+                )
             )
         except Exception:
             logger.exception(
@@ -162,22 +195,23 @@ class FileService:
         material_id_str: str,
         object_storage_key: str,
         filename: str,
+        make_object_storage: Callable[[], ObjectStorageInterface],
+        make_embedding: Callable[[], EmbeddingInterface],
+        make_vector_db: Callable[[], VectorDBInterface],
+        get_sparse_encoder: Callable[[], SparseEncoderInterface],
+        get_document_converter: Callable[[], DocumentConverter],
+        get_text_splitter: Callable[[], TextSplitterInterface],
     ) -> None:
         """Full ingestion pipeline running on a fresh event loop.
 
         Creates its own DB engine (NullPool — mandatory to avoid asyncpg event-loop
-        conflicts), MinIO client, embedding client, and Qdrant client.
-        Reuses @lru_cache singletons for heavy ML models (thread-safe).
+        conflicts). All other clients are provided via factory callables injected through
+        the constructor, keeping concrete provider selection inside dependencies.py.
+        Reuses @lru_cache singletons for heavy ML models (thread-safe, no event-loop affinity).
         """
-        from app.api.dependencies import (
-            _get_bgem3_sparse_encoder,
-            _get_docling_converter,
-            _get_markdown_splitter,
-        )
-
         mat_id = uuid.UUID(material_id_str)
 
-        pg = PostgresSettings()  
+        pg = PostgresSettings()  # type: ignore
         db_url = URL.create(
             drivername="postgresql+asyncpg",
             username=pg.POSTGRES_USER,
@@ -192,29 +226,12 @@ class FileService:
             connect_args={"ssl": pg.POSTGRES_SSL},
         )
 
-        minio_s = MinIOSettings()  
-        minio = MinIOClient(
-            endpoint_url=minio_s.MINIO_ENDPOINT,
-            access_key=minio_s.MINIO_USER,
-            secret_key=minio_s.MINIO_PASSWORD,
-            use_ssl=minio_s.MINIO_USE_SSL,
-        )
-
-        ollama_s = OllamaSettings()  
-        embed_client = OllamaEmbeddingClient(
-            host=ollama_s.OLLAMA_HOST,
-            model_name=ollama_s.OLLAMA_EMBED_MODEL,
-        )
-
-        qdrant_s = QdrantSettings()  
-        vector_db = QdrantVectorClient(
-            endpoint=qdrant_s.QDRANT_ENDPOINT,
-            api_key=qdrant_s.QDRANT_API_KEY,
-        )
-
-        converter     = _get_docling_converter()
-        sparse_enc    = _get_bgem3_sparse_encoder()
-        text_splitter = _get_markdown_splitter()
+        minio: ObjectStorageInterface = make_object_storage()
+        embed_client: EmbeddingInterface = make_embedding()
+        vector_db: VectorDBInterface = make_vector_db()
+        sparse_enc: SparseEncoderInterface = get_sparse_encoder()
+        converter: DocumentConverter = get_document_converter()
+        text_splitter: TextSplitterInterface = get_text_splitter()
 
         async with AsyncSession(engine, expire_on_commit=False) as db:
             vectors_written: bool = False

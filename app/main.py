@@ -1,5 +1,4 @@
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
 import logging
@@ -24,20 +23,18 @@ from app.api.dependencies import (
     _get_cross_encoder_reranker,
     _get_docling_converter,
     _get_minio_client,
+    create_ingestion_executor,
 )
-from app.core.config import ExecutorSettings, MINIO_MATERIALS_BUCKET
+from app.core.config import MINIO_MATERIALS_BUCKET
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting up AI Tutor API...")
 
-    executor_settings = ExecutorSettings()  
-    executor = ThreadPoolExecutor(max_workers=executor_settings.INGESTION_MAX_WORKERS)
+    executor = create_ingestion_executor()
     app.state.executor = executor
-    logger.info(
-        f"ThreadPoolExecutor started (max_workers={executor_settings.INGESTION_MAX_WORKERS})."
-    )
+    logger.info("Ingestion ThreadPoolExecutor started.")
 
     engine = _get_async_engine()
     logger.info("Initializing database tables...")

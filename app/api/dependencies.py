@@ -22,6 +22,7 @@ from app.core.config import (
     BM25Settings,
     BGEM3Settings,
     ChunkingSettings,
+    ExecutorSettings,
 )
 
 from app.data_access.interfaces.embedding import EmbeddingInterface
@@ -37,7 +38,7 @@ from app.data_access.clients.minio_client import MinIOClient
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.engine import URL
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Callable
 
 from app.services.file_service import FileService
 
@@ -164,12 +165,50 @@ def _get_docling_converter() -> DocumentConverter:
     return DocumentConverter()
 
 
-def get_executor(request: Request) -> ThreadPoolExecutor:
-    """Returns the app-level ThreadPoolExecutor stored on app.state.
+def create_ingestion_executor() -> ThreadPoolExecutor:
+    """Creates the ThreadPoolExecutor for background ingestion.
 
-    Must be called from a request context — app.state is populated during lifespan.
+    Called once during lifespan startup; the result is stored on app.state.
     """
+    settings = ExecutorSettings()  # type: ignore
+    return ThreadPoolExecutor(max_workers=settings.INGESTION_MAX_WORKERS)
+
+
+def get_ingestion_executor(request: Request) -> ThreadPoolExecutor:
+    """Returns the app-level ingestion ThreadPoolExecutor stored on app.state."""
     return request.app.state.executor
+
+
+def make_ingestion_object_storage() -> ObjectStorageInterface:
+    """Factory for a fresh ObjectStorage client bound to the ingestion event loop."""
+    app = AppSettings()  # type: ignore
+    if app.OBJECT_STORAGE_CLIENT_TYPE == "minio":
+        s = MinIOSettings()  # type: ignore
+        return MinIOClient(
+            endpoint_url=s.MINIO_ENDPOINT,
+            access_key=s.MINIO_USER,
+            secret_key=s.MINIO_PASSWORD,
+            use_ssl=s.MINIO_USE_SSL,
+        )
+    raise ValueError(f"Unsupported Object Storage type: {app.OBJECT_STORAGE_CLIENT_TYPE}")
+
+
+def make_ingestion_embedding() -> EmbeddingInterface:
+    """Factory for a fresh Embedding client bound to the ingestion event loop."""
+    app = AppSettings()  # type: ignore
+    if app.EMBEDDING_CLIENT_TYPE == "ollama":
+        s = OllamaSettings()  # type: ignore
+        return OllamaEmbeddingClient(host=s.OLLAMA_HOST, model_name=s.OLLAMA_EMBED_MODEL)
+    raise ValueError(f"Unsupported Embedding Client type: {app.EMBEDDING_CLIENT_TYPE}")
+
+
+def make_ingestion_vector_db() -> VectorDBInterface:
+    """Factory for a fresh VectorDB client bound to the ingestion event loop."""
+    app = AppSettings()  # type: ignore
+    if app.VECTOR_DB_CLIENT_TYPE == "qdrant":
+        s = QdrantSettings()  # type: ignore
+        return QdrantClient(endpoint=s.QDRANT_ENDPOINT, api_key=s.QDRANT_API_KEY)
+    raise ValueError(f"Unsupported Vector Database type: {app.VECTOR_DB_CLIENT_TYPE}")
 
 
 def get_object_storage_client(
@@ -351,15 +390,16 @@ def get_chat_service(
 def get_file_service(
     object_storage: ObjectStorageInterface = Depends(get_object_storage_client),
     db: AsyncSession = Depends(get_db_session),
-    executor: ThreadPoolExecutor = Depends(get_executor),
+    executor: ThreadPoolExecutor = Depends(get_ingestion_executor),
 ) -> FileService:
-    """Constructs FileService with only what the upload path needs.
-
-    The background ingestion thread resolves all heavy clients (embeddings, vector DB,
-    MinIO download) by itself — they must not be shared across event loops.
-    """
     return FileService(
         object_storage=object_storage,
         db=db,
         executor=executor,
+        make_ingestion_object_storage=make_ingestion_object_storage,
+        make_ingestion_embedding=make_ingestion_embedding,
+        make_ingestion_vector_db=make_ingestion_vector_db,
+        get_ingestion_sparse_encoder=_get_bgem3_sparse_encoder,
+        get_ingestion_document_converter=_get_docling_converter,
+        get_ingestion_text_splitter=_get_markdown_splitter,
     )
