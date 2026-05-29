@@ -90,17 +90,28 @@ class ChatService:
         query: str,
         user_id: uuid.UUID,
         conversation_id: Optional[uuid.UUID] = None,
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[dict]:
         conversation_id = await self._get_or_create_conversation(
             user_id, conversation_id, query
         )
-        messages = await self._prepare_llm_messages(conversation_id, query)
+        history = await self.get_conversation_messages(conversation_id)
+
+        yield {"type": "status", "message": "Thinking about your question..."}
+        search_query = await self._condense_query(history, query)
+
+        yield {"type": "status", "message": "Searching the knowledge base..."}
+        context = await self._retrieve_relevant_chunks(
+            search_query, collection_name=QDRANT_MATERIALS_COLLECTION
+        )
+
+        messages = self._build_context_messages(history, context, query)
         await self._persist_message(conversation_id, MessageSender.USER, query)
 
+        yield {"type": "status", "message": "Generating answer..."}
         chunks = []
         async for chunk in self.llm_client.stream(messages):
             chunks.append(chunk)
-            yield chunk
+            yield {"type": "chunk", "content": chunk}
 
         await self._persist_message(conversation_id, MessageSender.AI, "".join(chunks))
 
@@ -139,12 +150,12 @@ class ChatService:
         logger.info(f"Condensed query: '{query}' → '{condensed}'")
         return condensed
 
-    async def _prepare_llm_messages(
-        self, conversation_id: uuid.UUID, query: str
+    def _build_context_messages(
+        self,
+        history: List[Message],
+        context: str,
+        query: str,
     ) -> List[ChatMessage]:
-        history = await self.get_conversation_messages(conversation_id)
-        search_query = await self._condense_query(history, query)
-
         messages: List[ChatMessage] = [
             ChatMessage(role=MessageRole.SYSTEM, content=TUTOR_SYSTEM_PROMPT)
         ]
@@ -156,9 +167,6 @@ class ChatService:
             )
             messages.append(ChatMessage(role=role, content=msg.content))
 
-        context = await self._retrieve_relevant_chunks(
-            search_query, collection_name=QDRANT_MATERIALS_COLLECTION
-        )  # TODO: collection_name should come from session/material metadata
         if context:
             logger.info(f"Retrieved context for query '{query}': {context}")
             messages.append(
