@@ -97,9 +97,6 @@ async def upload_attachment(
 
     attachment_id = uuid.uuid4()
     object_key = build_attachment_object_key(current_user.id, attachment_id, filename)
-    await object_storage.upload_file(
-        MINIO_ATTACHMENTS_BUCKET, object_key, content, "application/pdf"
-    )
 
     attachment = Attachment(
         id=attachment_id,
@@ -110,6 +107,10 @@ async def upload_attachment(
     db.add(attachment)
     await db.commit()
     await db.refresh(attachment)
+
+    await object_storage.upload_file(
+        MINIO_ATTACHMENTS_BUCKET, object_key, content, "application/pdf"
+    )
     return AttachmentPublic.model_validate(attachment)
 
 

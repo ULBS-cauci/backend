@@ -138,7 +138,7 @@ class ChatService:
         messages = await self._prepare_llm_messages(
             conversation_id, query, attachment_ids, user_id
         )
-        user_message = await self._persist_message(conversation_id, MessageSender.USER, query)
+        user_message = await self._persist_message(conversation_id, MessageSender.USER, query, flush_only=bool(attachment_ids))
         if attachment_ids:
             await self._link_attachments_to_message(user_message.id, attachment_ids, user_id)
 
@@ -253,11 +253,14 @@ class ChatService:
         return messages
 
     async def _persist_message(
-        self, conversation_id: uuid.UUID, sender: MessageSender, content: str
+        self, conversation_id: uuid.UUID, sender: MessageSender, content: str, *, flush_only: bool = False
     ) -> Message:
         message = Message(conversation_id=conversation_id, sender=sender, content=content)
         self.db_session.add(message)
-        await self.db_session.commit()
+        if flush_only:
+            await self.db_session.flush()
+        else:
+            await self.db_session.commit()
         await self.db_session.refresh(message)
         return message
 
@@ -312,12 +315,13 @@ class ChatService:
             .values(message_id=message_id)
         )
         result = await self.db_session.execute(stmt)
-        await self.db_session.commit()
         if result.rowcount != len(attachment_ids):
+            await self.db_session.rollback()
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="One or more attachments not found, not owned by user, or already linked.",
             )
+        await self.db_session.commit()
 
     async def _retrieve_relevant_chunks(
         self,
