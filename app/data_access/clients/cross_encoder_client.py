@@ -34,7 +34,7 @@ class CrossEncoderReranker(RerankerInterface):
             t0 = time.perf_counter()
             scores = self._model.predict(pairs)
             elapsed = time.perf_counter() - t0
-            logger.info(
+            logger.debug(
                 f"Reranker: scored {len(pairs)} pairs in {elapsed * 1000:.1f} ms"
             )
             ranked = sorted(zip(scores, results), key=lambda x: x[0], reverse=True)

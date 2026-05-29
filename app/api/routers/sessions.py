@@ -1,10 +1,11 @@
+import io
 import json
 import uuid
 from typing import List
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.dependencies import (
@@ -27,6 +28,8 @@ from app.schemas.user_schemas import User
 from app.services.chat_service import ChatService
 
 router = APIRouter()
+
+MAX_ATTACHMENT_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 @router.get("/", response_model=List[ConversationPublic])
@@ -56,7 +59,7 @@ async def list_conversation_messages(
     )
     if not conversation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-    return await service.get_conversation_messages(conversation_id=conversation_id)
+    return await service.get_conversation_messages_public(conversation_id=conversation_id)
 
 
 @router.post(
@@ -77,11 +80,19 @@ async def upload_attachment(
             detail="Only PDF files are accepted for chat attachments.",
         )
 
-    content = await file.read()
+    # Read up to the size limit + 1 so we can detect oversize uploads without buffering more.
+    content = await file.read(MAX_ATTACHMENT_UPLOAD_BYTES + 1)
     if not content:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Uploaded file is empty.",
+        )
+    if len(content) > MAX_ATTACHMENT_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=(
+                f"Uploaded file exceeds the {MAX_ATTACHMENT_UPLOAD_BYTES // (1024 * 1024)} MB limit."
+            ),
         )
 
     attachment_id = uuid.uuid4()
@@ -102,12 +113,48 @@ async def upload_attachment(
     return AttachmentPublic.model_validate(attachment)
 
 
+@router.get("/attachments/{attachment_id}")
+async def download_attachment(
+    attachment_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    object_storage: ObjectStorageInterface = Depends(get_object_storage_client),
+    db: AsyncSession = Depends(get_db_session),
+):
+    attachment = await db.get(Attachment, attachment_id)
+    if not attachment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found"
+        )
+    if attachment.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this attachment",
+        )
+
+    try:
+        data = await object_storage.download_file(
+            MINIO_ATTACHMENTS_BUCKET, attachment.object_storage_key
+        )
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attachment file is missing from storage",
+        )
+
+    encoded_name = quote(attachment.file_name)
+    headers = {
+        "Content-Disposition": f'inline; filename="{encoded_name}"; filename*=UTF-8\'\'{encoded_name}'
+    }
+    return StreamingResponse(
+        io.BytesIO(data), media_type="application/pdf", headers=headers
+    )
+
+
 @router.post("/ask")
 async def ask(
     payload: MessageCreate,
     current_user: User = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
-    db: AsyncSession = Depends(get_db_session),
 ):
     if payload.conversation_id:
         conversation = await service.get_conversation_for_user(
@@ -117,21 +164,6 @@ async def ask(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Conversation not found or unauthorized",
-            )
-
-    if payload.attachment_ids:
-        stmt = (
-            select(Attachment)
-            .where(Attachment.id.in_(payload.attachment_ids))
-            .where(Attachment.user_id == current_user.id)
-            .where(Attachment.message_id == None)  # noqa: E711
-        )
-        result = await db.exec(stmt)
-        found = list(result.all())
-        if len(found) != len(payload.attachment_ids):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="One or more attachments not found, not owned by you, or already used.",
             )
 
     async def event_stream():

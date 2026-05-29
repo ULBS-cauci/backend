@@ -46,10 +46,6 @@ class Message(MessageBase, TimestampSchema, table=True):
     __tablename__ = "messages"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
 
-class MessagePublic(MessageBase):
-    id: uuid.UUID
-    created_at: datetime
-
 class MessageCreate(SQLModel):
     conversation_id: Optional[uuid.UUID] = None
     content: str = Field(..., min_length=5, description="The content of the message.")
@@ -67,14 +63,17 @@ class Attachment(AttachmentBase, TimestampSchema, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="users.id")
     message_id: Optional[uuid.UUID] = Field(default=None, foreign_key="messages.id")
-    file_name: str = Field(max_length=255)
     object_storage_key: str = Field(max_length=2048)
 
 class AttachmentPublic(SQLModel):
     id: uuid.UUID
     file_name: str
-    object_storage_key: str
     created_at: datetime
+
+class MessagePublic(MessageBase):
+    id: uuid.UUID
+    created_at: datetime
+    attachments: List[AttachmentPublic] = Field(default_factory=list)
 
 # ==========================================
 # SHARED LINK
