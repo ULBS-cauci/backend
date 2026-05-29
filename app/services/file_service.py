@@ -12,12 +12,11 @@ from app.data_access.interfaces.object_storage import ObjectStorageInterface
 from app.schemas.knowledge_schemas import Material, MaterialPublic
 from app.core.config import MINIO_MATERIALS_BUCKET, QDRANT_MATERIALS_COLLECTION
 from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
-from app.schemas.vector_schemas import DocumentChunk
 from app.schemas.knowledge_schemas import Material
+from app.data_access.interfaces.text_splitter import TextSplitterInterface
 from app.workers.ingestion_worker import (
     extract_text_from_pdf,
-    split_text_into_chunks,
-    create_document_chunks,
+    create_document_chunks
 )
 
 
@@ -30,15 +29,14 @@ class FileService:
         object_storage: ObjectStorageInterface,
         sparse_encoder: SparseEncoderInterface,
         db: AsyncSession,
-        chunking_settings: ChunkingSettings,
+        text_splitter: TextSplitterInterface,
     ):
         self.vector_db = vector_db
         self.embed_client = embed_client
         self.object_storage = object_storage
-        self.sparse_encoder = sparse_encoder
+        self.sparse_encoder = sparse_encoder        
+        self.text_splitter = text_splitter
         self.db = db
-        self.chunking_settings = chunking_settings
-        
 
     async def upload_and_index(
         self, file: UploadFile, course_id: uuid.UUID, user_id: uuid.UUID
@@ -80,13 +78,22 @@ class FileService:
             raise
 
     async def process_and_index_pdf(self, content: bytes, filename: str) -> str:
-        full_text = await asyncio.to_thread(extract_text_from_pdf, content)
+        try:
+            full_text = await asyncio.to_thread(extract_text_from_pdf, content)
+        except ValueError as exc:
+            error_message = str(exc)
+            if error_message == "PDF contains no extractable text":
+                raise ValueError(
+                    f"Document {filename} contains no extractable text."
+                ) from exc
+            raise ValueError(
+                f"Failed to process document {filename}: {error_message}"
+            ) from exc
 
+        # Use injected text splitter with configured chunk size/overlap
         text_chunks = await asyncio.to_thread(
-            split_text_into_chunks,
-            full_text,
-            self.chunking_settings.CHUNK_SIZE,
-            self.chunking_settings.CHUNK_OVERLAP,
+            self.text_splitter.split_text,
+            full_text
         )
 
         if not text_chunks:
