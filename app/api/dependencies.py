@@ -300,6 +300,7 @@ def get_chat_service(
     reranker: RerankerInterface = Depends(get_reranker),
     db_session: AsyncSession = Depends(get_db_session),
     cross_encoder_settings: CrossEncoderSettings = Depends(get_cross_encoder_settings),
+    object_storage: ObjectStorageInterface = Depends(get_object_storage_client),
 ) -> ChatService:
     return ChatService(
         vector_db=vector_db,
@@ -309,6 +310,7 @@ def get_chat_service(
         reranker=reranker,
         score_threshold=cross_encoder_settings.CROSS_ENCODER_SCORE_THRESHOLD,
         db_session=db_session,
+        object_storage=object_storage,
     )
 
 
