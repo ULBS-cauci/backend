@@ -167,8 +167,7 @@ class FileService:
         """Sync wrapper. Creates a fresh event loop via asyncio.run().
 
         asyncio.run() is safe here because ThreadPoolExecutor workers are plain OS
-        threads with no pre-existing event loop — unlike asyncio.to_thread() workers
-        which inherit the parent loop.
+        threads with no pre-existing event loop.
         """
         try:
             asyncio.run(

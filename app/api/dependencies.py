@@ -38,7 +38,7 @@ from app.data_access.clients.minio_client import MinIOClient
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.engine import URL
-from typing import AsyncGenerator, Callable
+from typing import AsyncGenerator
 
 from app.services.file_service import FileService
 
@@ -181,7 +181,7 @@ def get_ingestion_executor(request: Request) -> ThreadPoolExecutor:
 
 def make_ingestion_object_storage() -> ObjectStorageInterface:
     """Factory for a fresh ObjectStorage client bound to the ingestion event loop."""
-    app = AppSettings()  # type: ignore
+    app = get_app_settings()
     if app.OBJECT_STORAGE_CLIENT_TYPE == "minio":
         s = MinIOSettings()  # type: ignore
         return MinIOClient(
@@ -195,7 +195,7 @@ def make_ingestion_object_storage() -> ObjectStorageInterface:
 
 def make_ingestion_embedding() -> EmbeddingInterface:
     """Factory for a fresh Embedding client bound to the ingestion event loop."""
-    app = AppSettings()  # type: ignore
+    app = get_app_settings()
     if app.EMBEDDING_CLIENT_TYPE == "ollama":
         s = OllamaSettings()  # type: ignore
         return OllamaEmbeddingClient(host=s.OLLAMA_HOST, model_name=s.OLLAMA_EMBED_MODEL)
@@ -204,7 +204,7 @@ def make_ingestion_embedding() -> EmbeddingInterface:
 
 def make_ingestion_vector_db() -> VectorDBInterface:
     """Factory for a fresh VectorDB client bound to the ingestion event loop."""
-    app = AppSettings()  # type: ignore
+    app = get_app_settings()
     if app.VECTOR_DB_CLIENT_TYPE == "qdrant":
         s = QdrantSettings()  # type: ignore
         return QdrantClient(endpoint=s.QDRANT_ENDPOINT, api_key=s.QDRANT_API_KEY)
