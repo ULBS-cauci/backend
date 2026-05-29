@@ -73,4 +73,5 @@ class ChunkingSettings(_Base):
 
 
 MINIO_MATERIALS_BUCKET = "materials"
+MINIO_ATTACHMENTS_BUCKET = "chat-attachments"
 QDRANT_MATERIALS_COLLECTION = "university_library"

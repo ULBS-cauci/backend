@@ -18,7 +18,7 @@ from app.schemas.admin_schemas import SystemPrompt, LlmTip
 from app.api.dependencies import _get_async_engine, _get_bgem3_sparse_encoder, _get_cross_encoder_reranker, _get_minio_client
 
 from app.api.routers import files
-from app.core.config import MINIO_MATERIALS_BUCKET
+from app.core.config import MINIO_ATTACHMENTS_BUCKET, MINIO_MATERIALS_BUCKET
 
 
 @asynccontextmanager
@@ -42,6 +42,7 @@ async def lifespan(app: FastAPI):
     minio = _get_minio_client()
     await minio.connect()
     await minio.create_bucket(MINIO_MATERIALS_BUCKET)
+    await minio.create_bucket(MINIO_ATTACHMENTS_BUCKET)
     logger.info("MinIO client connected.")
 
     try:
