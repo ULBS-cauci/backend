@@ -140,15 +140,17 @@ class ChatService:
         yield {"type": "status", "message": "Thinking about your question..."}
         search_query = await self._condense_query(history, query)
 
-        yield {"type": "status", "message": "Searching the knowledge base..."}
-        context = await self._retrieve_relevant_chunks(
-            search_query, collection_name=QDRANT_MATERIALS_COLLECTION
-        )
-
         attachment_texts: List[str] = []
         if attachment_ids:
             yield {"type": "status", "message": "Reading your attachments..."}
             attachment_texts = await self._fetch_attachment_texts(attachment_ids, user_id)
+            logger.info(f"Fetched {len(attachment_texts)} attachment(s), total chars: {sum(len(t) for t in attachment_texts)}")
+            context = ""
+        else:
+            yield {"type": "status", "message": "Searching the knowledge base..."}
+            context = await self._retrieve_relevant_chunks(
+                search_query, collection_name=QDRANT_MATERIALS_COLLECTION
+            )
 
         messages = self._build_context_messages(history, context, query, attachment_texts)
         user_message = await self._persist_message(conversation_id, MessageSender.USER, query, flush_only=bool(attachment_ids))
