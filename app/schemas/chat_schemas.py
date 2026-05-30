@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Literal, Optional, TypedDict, Union
 from datetime import datetime, timezone
 import uuid
 from enum import Enum
@@ -90,5 +90,23 @@ class SharedLink(SharedLinkBase, TimestampSchema, table=True):
 class SharedLinkPublic(SharedLinkBase):
     id: uuid.UUID
     created_at: datetime
+
+
+class StatusEvent(TypedDict):
+    type: Literal["status"]
+    message: str
+
+
+class ChunkEvent(TypedDict):
+    type: Literal["chunk"]
+    content: str
+
+
+class ErrorEvent(TypedDict):
+    type: Literal["error"]
+    message: str
+
+
+StreamEvent = Union[StatusEvent, ChunkEvent, ErrorEvent]
 
 

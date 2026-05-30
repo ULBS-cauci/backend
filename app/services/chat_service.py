@@ -19,6 +19,7 @@ from app.schemas.chat_schemas import (
     Message,
     MessagePublic,
     MessageSender,
+    StreamEvent,
 )
 from app.schemas.llm_schemas import ChatMessage, MessageRole
 from app.data_access.interfaces.vector_db import VectorDBInterface
@@ -130,7 +131,7 @@ class ChatService:
         user_id: uuid.UUID,
         conversation_id: Optional[uuid.UUID] = None,
         attachment_ids: Optional[List[uuid.UUID]] = None,
-    ) -> AsyncIterator[dict]:
+    ) -> AsyncIterator[StreamEvent]:
         attachment_ids = attachment_ids or []
         conversation_id = await self._get_or_create_conversation(
             user_id, conversation_id, query
@@ -145,6 +146,8 @@ class ChatService:
             yield {"type": "status", "message": "Reading your attachments..."}
             attachment_texts = await self._fetch_attachment_texts(attachment_ids, user_id)
             logger.info(f"Fetched {len(attachment_texts)} attachment(s), total chars: {sum(len(t) for t in attachment_texts)}")
+
+        if attachment_texts:
             context = ""
         else:
             yield {"type": "status", "message": "Searching the knowledge base..."}
@@ -243,7 +246,7 @@ class ChatService:
                 )
             )
             messages.append(ChatMessage(role=MessageRole.SYSTEM, content=context))
-        else:
+        elif not attachment_texts:
             messages.append(
                 ChatMessage(
                     role=MessageRole.SYSTEM,

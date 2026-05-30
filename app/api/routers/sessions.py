@@ -168,13 +168,16 @@ async def ask(
             )
 
     async def event_stream():
-        async for event in service.ask_stream(
-            query=payload.content,
-            user_id=current_user.id,
-            conversation_id=payload.conversation_id,
-            attachment_ids=payload.attachment_ids,
-        ):
-            yield f"data: {json.dumps(event)}\n\n"
+        try:
+            async for event in service.ask_stream(
+                query=payload.content,
+                user_id=current_user.id,
+                conversation_id=payload.conversation_id,
+                attachment_ids=payload.attachment_ids,
+            ):
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as exc:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
