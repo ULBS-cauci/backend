@@ -76,10 +76,6 @@ class ChunkingSettings(_Base):
     CHUNK_OVERLAP: int = 100
 
 
-class IngestionSettings(_Base):
-    INGEST_BATCH_SIZE: int = (
-        256  # chunks processed per pipeline batch (overlap unit + memory bound)
-    )
 class ExecutorSettings(_Base):
     """Controls the ThreadPoolExecutor used for background document ingestion."""
     INGESTION_MAX_WORKERS: int = 4

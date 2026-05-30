@@ -130,12 +130,6 @@ def get_chunking_settings() -> ChunkingSettings:
 
 
 @lru_cache()
-def get_ingestion_settings() -> IngestionSettings:
-    """Caches the ingestion pipeline settings per application lifecycle."""
-    return IngestionSettings()  # type: ignore
-
-  
-@lru_cache()
 def _get_text_splitter() -> LangChainRecursiveSplitterClient:
     """Caches the text splitter per application lifecycle."""
     chunking_settings = get_chunking_settings()
@@ -208,7 +202,7 @@ def make_ingestion_embedding() -> EmbeddingInterface:
     app = get_app_settings()
     if app.EMBEDDING_CLIENT_TYPE == "ollama":
         s = OllamaSettings()  # type: ignore
-        return OllamaEmbeddingClient(host=s.OLLAMA_HOST, model_name=s.OLLAMA_EMBED_MODEL)
+        return OllamaEmbeddingClient(host=s.OLLAMA_HOST, model_name=s.OLLAMA_EMBED_MODEL, batch_size=s.OLLAMA_EMBED_BATCH_SIZE)
     raise ValueError(f"Unsupported Embedding Client type: {app.EMBEDDING_CLIENT_TYPE}")
 
 
