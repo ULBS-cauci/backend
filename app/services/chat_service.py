@@ -36,6 +36,10 @@ TUTOR_SYSTEM_PROMPT = (
     "If you are not sure about something, say so."
 )
 
+# Maximum number of past messages injected into the generation LLM prompt.
+# Full history is still kept in PostgreSQL and used for query condensation.
+HISTORY_WINDOW = 20  # 10 user+AI turn pairs
+
 # Bounds on attachment text injected into the LLM prompt to prevent context blow-up / DoS.
 MAX_ATTACHMENT_CHARS = 10_000
 MAX_TOTAL_ATTACHMENT_CHARS = 30_000
@@ -197,7 +201,12 @@ class ChatService:
         messages: List[ChatMessage] = [
             ChatMessage(role=MessageRole.SYSTEM, content=TUTOR_SYSTEM_PROMPT)
         ]
-        for msg in history:
+        windowed_history = history[-HISTORY_WINDOW:]
+        if len(windowed_history) < len(history):
+            logger.info(
+                f"History truncated for generation: {len(history)} → {len(windowed_history)} messages"
+            )
+        for msg in windowed_history:
             role = (
                 MessageRole.USER
                 if msg.sender == MessageSender.USER
@@ -372,4 +381,6 @@ class ChatService:
                 f"No chunks above threshold {self.score_threshold} for query '{query}'"
             )
             return ""
-        return "\n---\n".join(res.chunk.text for res in above_threshold)
+        # Least relevant chunk first, most relevant last — LLMs attend more strongly
+        # to text near the end of a message ("lost in the middle" effect).
+        return "\n---\n".join(res.chunk.text for res in reversed(above_threshold))
