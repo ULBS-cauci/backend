@@ -151,7 +151,7 @@ class ChatService:
             attachment_texts = await self._fetch_attachment_texts(attachment_ids, user_id)
 
         messages = self._build_context_messages(history, context, query, attachment_texts)
-        user_message = await self._persist_message(conversation_id, MessageSender.USER, query)
+        user_message = await self._persist_message(conversation_id, MessageSender.USER, query, flush_only=bool(attachment_ids))
         if attachment_ids:
             await self._link_attachments_to_message(user_message.id, attachment_ids, user_id)
 
