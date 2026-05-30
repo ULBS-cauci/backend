@@ -30,6 +30,8 @@ from sqlalchemy.pool import NullPool
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+
+from app.core.helpers import build_material_object_key
 from app.core.config import (
     MINIO_MATERIALS_BUCKET,
     QDRANT_MATERIALS_COLLECTION,
@@ -53,11 +55,6 @@ _CONTENT_TYPE_BY_EXTENSION: dict[str, str] = {
     "jpg":  "image/jpeg",
     "jpeg": "image/jpeg",
 }
-
-
-def build_object_key(course_id: uuid.UUID, filename: str) -> str:
-    return f"{course_id}/{uuid.uuid4()}_{filename}"
-
 
 class FileService:
     def __init__(
@@ -107,7 +104,8 @@ class FileService:
 
         content_type = _CONTENT_TYPE_BY_EXTENSION[suffix]
         content = await file.read()
-        object_key = build_object_key(course_id, filename)
+        material_id = uuid.uuid4()
+        object_key = build_material_object_key(course_id, material_id, filename)
 
         await self.object_storage.upload_file(
             MINIO_MATERIALS_BUCKET, object_key, content, content_type
@@ -115,6 +113,7 @@ class FileService:
 
         try:
             material = Material(
+                id=material_id,
                 course_id=course_id,
                 file_name=filename,
                 file_type=suffix,
