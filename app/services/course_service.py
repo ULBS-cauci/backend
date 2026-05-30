@@ -64,9 +64,9 @@ class CourseService:
         display = CourseDisplay.model_validate(course)
         if user:
             display.teacher_name = f"{user.first_name} {user.last_name}"
-        return display
+        return display    
     
-    
+
     async def create_course(
         self, course_data: CourseCreate, teacher_id: uuid.UUID
     ) -> Course:
@@ -110,10 +110,15 @@ class CourseService:
                 await self.object_storage.delete_file(
                     MINIO_MATERIALS_BUCKET, material.object_storage_key
                 )
-            if material.vector_namespace and material.file_name:
-                await self.vector_db.delete_chunks_by_source(
-                    material.vector_namespace, material.file_name
-                )
+            if material.vector_namespace:
+                if material.object_storage_key:
+                    await self.vector_db.delete_chunks_by_source(
+                        material.vector_namespace, material.object_storage_key
+                    )
+                elif material.file_name:
+                    await self.vector_db.delete_chunks_by_source(
+                        material.vector_namespace, material.file_name
+                    )
             await self.db.delete(material)
         await self.db.flush()
         course = await self.db.get(Course, course_id)

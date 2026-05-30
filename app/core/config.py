@@ -80,7 +80,11 @@ class IngestionSettings(_Base):
     INGEST_BATCH_SIZE: int = (
         256  # chunks processed per pipeline batch (overlap unit + memory bound)
     )
+class ExecutorSettings(_Base):
+    """Controls the ThreadPoolExecutor used for background document ingestion."""
+    INGESTION_MAX_WORKERS: int = 4
 
 
 MINIO_MATERIALS_BUCKET = "materials"
+MINIO_ATTACHMENTS_BUCKET = "chat-attachments"
 QDRANT_MATERIALS_COLLECTION = "university_library"
