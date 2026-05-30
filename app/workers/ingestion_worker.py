@@ -5,6 +5,8 @@ All public functions in this module are designed to run inside a thread pool
 (via asyncio.to_thread() or concurrent.futures.ThreadPoolExecutor) to avoid
 blocking the async event loop.
 """
+
+import io
 import logging
 import os
 import tempfile

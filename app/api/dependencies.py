@@ -58,7 +58,9 @@ def _get_qdrant_client() -> QdrantClient:
     """Caches the Qdrant connection pool per application lifecycle."""
     settings = QdrantSettings()  # type: ignore
     return QdrantClient(
-        endpoint=settings.QDRANT_ENDPOINT, api_key=settings.QDRANT_API_KEY
+        endpoint=settings.QDRANT_ENDPOINT,
+        api_key=settings.QDRANT_API_KEY,
+        upsert_batch_size=settings.QDRANT_UPSERT_BATCH_SIZE,
     )
 
 
@@ -94,7 +96,9 @@ def _get_ollama_embedding_client() -> OllamaEmbeddingClient:
     """Caches the Ollama embedding client per application lifecycle."""
     settings = OllamaSettings()  # type: ignore
     return OllamaEmbeddingClient(
-        host=settings.OLLAMA_HOST, model_name=settings.OLLAMA_EMBED_MODEL
+        host=settings.OLLAMA_HOST,
+        model_name=settings.OLLAMA_EMBED_MODEL,
+        batch_size=settings.OLLAMA_EMBED_BATCH_SIZE,
     )
 
 
@@ -198,7 +202,7 @@ def make_ingestion_embedding() -> EmbeddingInterface:
     app = get_app_settings()
     if app.EMBEDDING_CLIENT_TYPE == "ollama":
         s = OllamaSettings()  # type: ignore
-        return OllamaEmbeddingClient(host=s.OLLAMA_HOST, model_name=s.OLLAMA_EMBED_MODEL)
+        return OllamaEmbeddingClient(host=s.OLLAMA_HOST, model_name=s.OLLAMA_EMBED_MODEL, batch_size=s.OLLAMA_EMBED_BATCH_SIZE)
     raise ValueError(f"Unsupported Embedding Client type: {app.EMBEDDING_CLIENT_TYPE}")
 
 
@@ -344,7 +348,9 @@ def get_sparse_encoder(
         return _get_bgem3_sparse_encoder()
     if app.SPARSE_ENCODER_CLIENT_TYPE == "bm25":
         return _get_bm25_sparse_encoder()
-    raise ValueError(f"Unsupported sparse encoder type: {app.SPARSE_ENCODER_CLIENT_TYPE}")
+    raise ValueError(
+        f"Unsupported sparse encoder type: {app.SPARSE_ENCODER_CLIENT_TYPE}"
+    )
 
 
 @lru_cache()

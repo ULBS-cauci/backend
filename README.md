@@ -132,7 +132,8 @@ Qdrant stores and searches document chunk embeddings. It runs as a Docker contai
 ```env
 VECTOR_DB_CLIENT_TYPE=qdrant
 QDRANT_ENDPOINT=http://localhost:6333
-# QDRANT_API_KEY=your_key   # optional — only if you enable authentication
+# QDRANT_API_KEY=your_key          # optional — only if you enable authentication
+# QDRANT_UPSERT_BATCH_SIZE=256     # optional — max points per upsert request (default: 256)
 ```
 
 > **API key (optional for local dev):** By default the compose file runs Qdrant without authentication. To enable it, uncomment the `QDRANT__SERVICE__API_KEY` block in `docker-compose.yml` and add `QDRANT_API_KEY=your_key` to your `.env`.
@@ -330,6 +331,7 @@ This downloads the model from Hugging Face (~8 GB on first run) and tags it loca
 EMBEDDING_CLIENT_TYPE=ollama
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_EMBED_MODEL=my-project-embed
+# OLLAMA_EMBED_BATCH_SIZE=128      # optional — max texts per embed request (default: 128)
 ```
 
 ### 4. Test the Embedding

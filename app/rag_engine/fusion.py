@@ -38,6 +38,5 @@ def rrf_fuse(
     sorted_ids = sorted(scores, key=lambda cid: scores[cid], reverse=True)
 
     return [
-        SearchResult(chunk=chunks[cid], score=scores[cid])
-        for cid in sorted_ids[:limit]
+        SearchResult(chunk=chunks[cid], score=scores[cid]) for cid in sorted_ids[:limit]
     ]

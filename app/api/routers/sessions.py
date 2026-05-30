@@ -40,12 +40,14 @@ async def list_conversations(
     return await service.get_user_conversations(user_id=current_user.id)
 
 
+
 @router.post("/", response_model=ConversationPublic)
 async def create_conversation(
     current_user: User = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ):
     return await service.create_conversation(user_id=current_user.id)
+
 
 
 @router.get("/{conversation_id}/messages", response_model=List[MessagePublic])
@@ -149,6 +151,7 @@ async def download_attachment(
     return StreamingResponse(
         io.BytesIO(data), media_type="application/pdf", headers=headers
     )
+
 
 
 @router.post("/ask")

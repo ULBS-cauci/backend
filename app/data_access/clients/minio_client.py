@@ -73,7 +73,10 @@ class MinIOClient(ObjectStorageInterface):
         try:
             await self._client.create_bucket(Bucket=bucket_name)
         except ClientError as exc:
-            if exc.response["Error"]["Code"] in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
+            if exc.response["Error"]["Code"] in (
+                "BucketAlreadyOwnedByYou",
+                "BucketAlreadyExists",
+            ):
                 return False
             raise
         return True

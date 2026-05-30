@@ -2,8 +2,17 @@ import uuid
 from typing import List, Optional
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
-    PointStruct, VectorParams, Distance, Filter, FieldCondition, MatchValue, FilterSelector,
-    SparseVectorParams, SparseIndexParams, SparseVector, ScoredPoint,
+    PointStruct,
+    VectorParams,
+    Distance,
+    Filter,
+    FieldCondition,
+    MatchValue,
+    FilterSelector,
+    SparseVectorParams,
+    SparseIndexParams,
+    SparseVector,
+    ScoredPoint,
 )
 
 from app.data_access.interfaces.vector_db import VectorDBInterface
@@ -11,10 +20,15 @@ from app.schemas.vector_schemas import DocumentChunk, SearchResult, SparseVector
 
 
 class QdrantClient(VectorDBInterface):
-    def __init__(self, endpoint: str, api_key: Optional[str] = None):
+    def __init__(
+        self, endpoint: str, api_key: Optional[str] = None, upsert_batch_size: int = 256
+    ):
         self.client = AsyncQdrantClient(url=endpoint, api_key=api_key)
+        self.upsert_batch_size = upsert_batch_size
 
-    async def create_collection(self, collection_name: str, vector_size: int, sparse: bool = False) -> bool:
+    async def create_collection(
+        self, collection_name: str, vector_size: int, sparse: bool = False
+    ) -> bool:
         if await self.client.collection_exists(collection_name=collection_name):
             info = await self.client.get_collection(collection_name)
             vectors_cfg = info.config.params.vectors
@@ -28,15 +42,19 @@ class QdrantClient(VectorDBInterface):
         if sparse:
             await self.client.create_collection(
                 collection_name=collection_name,
-                vectors_config={"dense": VectorParams(size=vector_size, distance=Distance.COSINE)},
-                sparse_vectors_config={"sparse": SparseVectorParams(
-                    index=SparseIndexParams(on_disk=False)
-                )},
+                vectors_config={
+                    "dense": VectorParams(size=vector_size, distance=Distance.COSINE)
+                },
+                sparse_vectors_config={
+                    "sparse": SparseVectorParams(index=SparseIndexParams(on_disk=False))
+                },
             )
         else:
             await self.client.create_collection(
                 collection_name=collection_name,
-                vectors_config={"dense": VectorParams(size=vector_size, distance=Distance.COSINE)},
+                vectors_config={
+                    "dense": VectorParams(size=vector_size, distance=Distance.COSINE)
+                },
             )
         return True
 
@@ -99,7 +117,11 @@ class QdrantClient(VectorDBInterface):
             collection_name=collection_name,
             points_selector=FilterSelector(
                 filter=Filter(
-                    must=[FieldCondition(key="metadata.source", match=MatchValue(value=source))]
+                    must=[
+                        FieldCondition(
+                            key="metadata.source", match=MatchValue(value=source)
+                        )
+                    ]
                 )
             ),
         )
@@ -112,34 +134,41 @@ class QdrantClient(VectorDBInterface):
         sparse_vectors: Optional[List[SparseVectorSchema]] = None,
     ) -> bool:
         if len(chunks) != len(vectors):
-            raise ValueError("The number of chunks must match the number of dense vectors.")
+            raise ValueError(
+                "The number of chunks must match the number of dense vectors."
+            )
         if sparse_vectors is not None and len(sparse_vectors) != len(chunks):
-            raise ValueError("The number of sparse vectors must match the number of chunks.")
+            raise ValueError(
+                "The number of sparse vectors must match the number of chunks."
+            )
 
-        if sparse_vectors is not None:
-            points = [
-                PointStruct(
-                    id=chunk.id,
-                    vector={
-                        "dense": dense_vec,
-                        "sparse": SparseVector(
-                            indices=sp_vec.indices,
-                            values=sp_vec.values,
-                        ),
-                    },
-                    payload={"text": chunk.text, "metadata": chunk.metadata},
-                )
-                for chunk, dense_vec, sp_vec in zip(chunks, vectors, sparse_vectors)
-            ]
-        else:
-            points = [
-                PointStruct(
-                    id=chunk.id,
-                    vector=dense_vec,
-                    payload={"text": chunk.text, "metadata": chunk.metadata},
-                )
-                for chunk, dense_vec in zip(chunks, vectors)
-            ]
-
-        await self.client.upsert(collection_name=collection_name, points=points)
+        batch_size = self.upsert_batch_size
+        for start in range(0, len(chunks), batch_size):
+            end = min(start + batch_size, len(chunks))
+            if sparse_vectors is not None:
+                points = [
+                    PointStruct(
+                        id=chunk.id,
+                        vector={
+                            "dense": dense_vec,
+                            "sparse": SparseVector(
+                                indices=sp_vec.indices, values=sp_vec.values
+                            ),
+                        },
+                        payload={"text": chunk.text, "metadata": chunk.metadata},
+                    )
+                    for chunk, dense_vec, sp_vec in zip(
+                        chunks[start:end], vectors[start:end], sparse_vectors[start:end]
+                    )
+                ]
+            else:
+                points = [
+                    PointStruct(
+                        id=chunk.id,
+                        vector=dense_vec,
+                        payload={"text": chunk.text, "metadata": chunk.metadata},
+                    )
+                    for chunk, dense_vec in zip(chunks[start:end], vectors[start:end])
+                ]
+            await self.client.upsert(collection_name=collection_name, points=points)
         return True

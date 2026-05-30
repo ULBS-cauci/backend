@@ -64,7 +64,8 @@ class CourseService:
         display = CourseDisplay.model_validate(course)
         if user:
             display.teacher_name = f"{user.first_name} {user.last_name}"
-        return display
+        return display    
+    
 
     async def create_course(
         self, course_data: CourseCreate, teacher_id: uuid.UUID

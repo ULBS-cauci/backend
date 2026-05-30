@@ -2,14 +2,17 @@ from abc import ABC, abstractmethod
 from typing import List, Optional
 from app.schemas.vector_schemas import DocumentChunk, SearchResult, SparseVectorSchema
 
+
 class VectorDBInterface(ABC):
     """
     Abstract Base Class defining the contract for any Vector Database
     used in the AI Tutor application.
     """
-    
+
     @abstractmethod
-    async def create_collection(self, collection_name: str, vector_size: int, sparse: bool = False) -> bool:
+    async def create_collection(
+        self, collection_name: str, vector_size: int, sparse: bool = False
+    ) -> bool:
         """
         Creates a new collection/index in the vector database.
 
@@ -32,15 +35,15 @@ class VectorDBInterface(ABC):
     async def delete_collection(self, collection_name: str) -> bool:
         """
         Permanently deletes a collection and all its underlying data.
-        
+
         Args:
             collection_name (str): The name of the collection to drop.
-            
+
         Returns:
             bool: True if successfully deleted, False if the collection did not exist.
-            
+
         Warning:
-            This is a destructive action and cannot be undone. Implementations must 
+            This is a destructive action and cannot be undone. Implementations must
             ensure this drops both the vectors and their associated payload/metadata.
         """
         pass
@@ -81,15 +84,8 @@ class VectorDBInterface(ABC):
             limit (int): Maximum number of results to return. Defaults to 5.
 
         Returns:
-            List[SearchResult]: A list of domain models containing the chunk data and its relevance 
+            List[SearchResult]: A list of domain models containing the chunk data and its relevance
             score, strictly sorted from highest relevance to lowest relevance.
-        """
-        pass
-
-    @abstractmethod
-    async def delete_chunks_by_source(self, collection_name: str, source: str) -> None:
-        """
-        Deletes all chunks whose metadata.source matches the given source string.
         """
         pass
 
