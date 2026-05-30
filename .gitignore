@@ -57,6 +57,9 @@ Thumbs.db
 .Spotlight-V100
 .Trashes
 
+# Local dependency overrides (machine-specific, never committed)
+requirements.local.txt
+
 # Misc
 .cache
 .mypy_cache/
