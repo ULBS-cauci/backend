@@ -153,15 +153,12 @@ class ChatService:
                 f"Fetched {len(attachment_texts)} attachment(s), total chars: {sum(len(t) for t in attachment_texts)}"
             )
 
-        if attachment_texts:
-            context = ""
-        else:
-            yield StatusEvent(message="Thinking about your question...")
-            search_query = await self._condense_query(history, query)
-            yield StatusEvent(message="Searching the knowledge base...")
-            context = await self._retrieve_relevant_chunks(
-                search_query, collection_name=QDRANT_MATERIALS_COLLECTION
-            )
+        yield StatusEvent(message="Thinking about your question...")
+        search_query = await self._condense_query(history, query)
+        yield StatusEvent(message="Searching the knowledge base...")
+        context = await self._retrieve_relevant_chunks(
+            search_query, collection_name=QDRANT_MATERIALS_COLLECTION
+        )
 
         messages = self._build_context_messages(
             history, context, query, attachment_texts
