@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-HARDCODED_TEACHER_ID = uuid.UUID("123e4567-e89b-12d3-a456-426614174001")
+HARDCODED_TEACHER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
 @router.get("/", response_model=list[CourseDisplay])
@@ -31,7 +31,7 @@ async def get_all_courses(
 ):
     return await course_service.get_all_courses()
 
-
+ 
 @router.get("/{course_id}/materials", response_model=list[MaterialPublic])
 async def get_course_materials(
     course_id: uuid.UUID,
@@ -79,14 +79,6 @@ async def preview_course_material(
     )
 
 
-@router.post("/", response_model=CourseDisplay, status_code=status.HTTP_201_CREATED)
-async def create_course(
-    course_data: CourseCreate,
-    course_service: CourseService = Depends(get_course_service),
-):
-    return await course_service.create_course(course_data, HARDCODED_TEACHER_ID)
-
-
 @router.get("/{course_id}", response_model=CourseDisplay)
 async def get_course(
     course_id: uuid.UUID,
@@ -108,6 +100,14 @@ async def update_course(
     if result is None:
         raise HTTPException(status_code=404, detail="Course not found")
     return result
+
+
+@router.post("/", response_model=CourseDisplay, status_code=status.HTTP_201_CREATED)
+async def create_course(
+    course_data: CourseCreate,
+    course_service: CourseService = Depends(get_course_service),
+):
+    return await course_service.create_course(course_data, HARDCODED_TEACHER_ID)
 
 
 @router.delete("/{course_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -1,5 +1,5 @@
-from typing import Optional
-from datetime import datetime
+from typing import List, Optional
+from datetime import datetime, timezone
 import uuid
 from enum import Enum
 from sqlmodel import SQLModel, Field
@@ -69,10 +69,6 @@ class Message(MessageBase, TimestampSchema, table=True):
     __tablename__ = "messages"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
 
-class MessagePublic(MessageBase):
-    id: uuid.UUID
-    created_at: datetime
-
 class MessageCreate(SQLModel):
     conversation_id: Optional[uuid.UUID] = None
     content: str = Field(..., min_length=5, description="The content of the message.")
@@ -80,23 +76,30 @@ class MessageCreate(SQLModel):
         default=None,
         description="Optional FK to output_formats — specifies the desired response format.",
     )
+    attachment_ids: List[uuid.UUID] = Field(default_factory=list)
 
 # ==========================================
 # ATTACHMENT
 # ==========================================
 class AttachmentBase(SQLModel):
-    message_id: uuid.UUID = Field(foreign_key="messages.id")
     file_name: str = Field(max_length=255)
     
 class Attachment(AttachmentBase, TimestampSchema, table=True):
     __tablename__ = "attachments"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    object_storage_key: str = Field(max_length=2048) # Replaces file_url
+    user_id: uuid.UUID = Field(foreign_key="users.id")
+    message_id: Optional[uuid.UUID] = Field(default=None, foreign_key="messages.id")
+    object_storage_key: str = Field(max_length=2048)
 
-class AttachmentPublic(AttachmentBase):
+class AttachmentPublic(SQLModel):
     id: uuid.UUID
-    object_storage_key: str
+    file_name: str
     created_at: datetime
+
+class MessagePublic(MessageBase):
+    id: uuid.UUID
+    created_at: datetime
+    attachments: List[AttachmentPublic] = Field(default_factory=list)
 
 # ==========================================
 # SHARED LINK

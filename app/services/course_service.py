@@ -60,7 +60,7 @@ class CourseService:
         )
         result = await self.db.execute(stmt)
         row = result.one_or_none()
-        if row is None:
+        if not row:
             return None
         course, user = row
         display = CourseDisplay.model_validate(course)
@@ -111,10 +111,15 @@ class CourseService:
                 await self.object_storage.delete_file(
                     MINIO_MATERIALS_BUCKET, material.object_storage_key
                 )
-            if material.vector_namespace and material.file_name:
-                await self.vector_db.delete_chunks_by_source(
-                    material.vector_namespace, material.file_name
-                )
+            if material.vector_namespace:
+                if material.object_storage_key:
+                    await self.vector_db.delete_chunks_by_source(
+                        material.vector_namespace, material.object_storage_key
+                    )
+                elif material.file_name:
+                    await self.vector_db.delete_chunks_by_source(
+                        material.vector_namespace, material.file_name
+                    )
             await self.db.delete(material)
         await self.db.flush()
         course = await self.db.get(Course, course_id)

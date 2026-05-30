@@ -1,8 +1,7 @@
 from typing import Optional
-from datetime import datetime, timezone
+from datetime import datetime
 import uuid
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, DateTime, func
 
 from app.schemas.time_schema import TimestampSchema
 
