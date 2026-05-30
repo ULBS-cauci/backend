@@ -15,10 +15,13 @@ from app.data_access.interfaces.object_storage import ObjectStorageInterface
 from app.schemas.chat_schemas import (
     Attachment,
     AttachmentPublic,
+    ChunkEvent,
     Conversation,
+    ErrorEvent,
     Message,
     MessagePublic,
     MessageSender,
+    StatusEvent,
     StreamEvent,
 )
 from app.schemas.llm_schemas import ChatMessage, MessageRole
@@ -109,7 +112,9 @@ class ChatService:
             return []
 
         message_ids = [m.id for m in messages]
-        attachments_stmt = select(Attachment).where(Attachment.message_id.in_(message_ids))
+        attachments_stmt = select(Attachment).where(
+            Attachment.message_id.in_(message_ids)
+        )
         attachments_result = await self.db_session.exec(attachments_stmt)
         attachments_by_message: dict[uuid.UUID, List[AttachmentPublic]] = {}
         for attachment in attachments_result.all():
@@ -138,33 +143,42 @@ class ChatService:
         )
         history = await self.get_conversation_messages(conversation_id)
 
-        yield {"type": "status", "message": "Thinking about your question..."}
-        search_query = await self._condense_query(history, query)
-
         attachment_texts: List[str] = []
         if attachment_ids:
-            yield {"type": "status", "message": "Reading your attachments..."}
-            attachment_texts = await self._fetch_attachment_texts(attachment_ids, user_id)
-            logger.info(f"Fetched {len(attachment_texts)} attachment(s), total chars: {sum(len(t) for t in attachment_texts)}")
+            yield StatusEvent(message="Reading your attachments...")
+            attachment_texts = await self._fetch_attachment_texts(
+                attachment_ids, user_id
+            )
+            logger.info(
+                f"Fetched {len(attachment_texts)} attachment(s), total chars: {sum(len(t) for t in attachment_texts)}"
+            )
 
         if attachment_texts:
             context = ""
         else:
-            yield {"type": "status", "message": "Searching the knowledge base..."}
+            yield StatusEvent(message="Thinking about your question...")
+            search_query = await self._condense_query(history, query)
+            yield StatusEvent(message="Searching the knowledge base...")
             context = await self._retrieve_relevant_chunks(
                 search_query, collection_name=QDRANT_MATERIALS_COLLECTION
             )
 
-        messages = self._build_context_messages(history, context, query, attachment_texts)
-        user_message = await self._persist_message(conversation_id, MessageSender.USER, query, flush_only=bool(attachment_ids))
+        messages = self._build_context_messages(
+            history, context, query, attachment_texts
+        )
+        user_message = await self._persist_message(
+            conversation_id, MessageSender.USER, query, flush_only=bool(attachment_ids)
+        )
         if attachment_ids:
-            await self._link_attachments_to_message(user_message.id, attachment_ids, user_id)
+            await self._link_attachments_to_message(
+                user_message.id, attachment_ids, user_id
+            )
 
-        yield {"type": "status", "message": "Generating answer..."}
+        yield StatusEvent(message="Generating answer...")
         chunks = []
         async for chunk in self.llm_client.stream(messages):
             chunks.append(chunk)
-            yield {"type": "chunk", "content": chunk}
+            yield ChunkEvent(content=chunk)
 
         await self._persist_message(conversation_id, MessageSender.AI, "".join(chunks))
 
@@ -223,7 +237,7 @@ class ChatService:
 
         if attachment_texts:
             delimited = "\n\n".join(
-                f"<attached_document index=\"{i + 1}\">\n{text}\n</attached_document>"
+                f'<attached_document index="{i + 1}">\n{text}\n</attached_document>'
                 for i, text in enumerate(attachment_texts)
             )
             messages.append(
@@ -262,9 +276,16 @@ class ChatService:
         return messages
 
     async def _persist_message(
-        self, conversation_id: uuid.UUID, sender: MessageSender, content: str, *, flush_only: bool = False
+        self,
+        conversation_id: uuid.UUID,
+        sender: MessageSender,
+        content: str,
+        *,
+        flush_only: bool = False,
     ) -> Message:
-        message = Message(conversation_id=conversation_id, sender=sender, content=content)
+        message = Message(
+            conversation_id=conversation_id, sender=sender, content=content
+        )
         self.db_session.add(message)
         if flush_only:
             await self.db_session.flush()
