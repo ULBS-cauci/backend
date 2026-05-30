@@ -10,6 +10,7 @@ logger = logging.getLogger("uvicorn.error")
 
 from app.rag_engine.fusion import rrf_fuse
 from app.rag_engine.query_rewrite import build_condensation_messages
+from app.rag_engine.query_dependency_checker import is_context_dependent
 from app.data_access.interfaces.llm import LLMInterface
 from app.data_access.interfaces.object_storage import ObjectStorageInterface
 from app.schemas.chat_schemas import (
@@ -182,6 +183,9 @@ class ChatService:
 
     async def _condense_query(self, history: List[Message], query: str) -> str:
         if not history:
+            return query
+        if not is_context_dependent(history, query):
+            logger.info(f"Standalone query detected, skipping condensation: '{query}'")
             return query
         condensation_messages = build_condensation_messages(history, query)
         condensed = await self.llm_client.generate(condensation_messages)
