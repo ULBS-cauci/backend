@@ -296,27 +296,6 @@ async def get_current_user(
     return user
 
 
-async def get_dev_course(
-    db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
-):
-    from app.schemas.course_schemas import Course
-
-    dummy_id = uuid.UUID("00000000-0000-0000-0000-000000000002")
-    course = await db.get(Course, dummy_id)
-    if not course:
-        course = Course(
-            id=dummy_id,
-            title="Dev Course",
-            description="Auto-created dev course for testing.",
-            held_by=current_user.id,
-        )
-        db.add(course)
-        await db.commit()
-        await db.refresh(course)
-    return course
-
-
 @lru_cache()
 def _get_bm25_sparse_encoder() -> BM25SparseEncoder:
     """Instantiates and caches the BM25 sparse encoder. Downloads vocabulary on first call."""

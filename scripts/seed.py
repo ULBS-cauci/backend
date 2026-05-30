@@ -124,11 +124,11 @@ class SeedIDs:
 
     # ── Users ─────────────────────────────────────────────────────────────────
     ADMIN   = uuid.UUID("00000000-0000-0000-0000-000000000003")
-    PROF    = uuid.UUID("123e4567-e89b-12d3-a456-426614174001")  # HARDCODED_TEACHER_ID
+    PROF    = uuid.UUID("123e4567-e89b-12d3-a456-426614174001")  # professor — owns the seeded catalog courses
     STUDENT = uuid.UUID("00000000-0000-0000-0000-000000000001")  # dummy dev user
 
     # ── Courses ───────────────────────────────────────────────────────────────
-    DEV_COURSE = uuid.UUID("00000000-0000-0000-0000-000000000002")  # get_dev_course()
+    DEV_COURSE = uuid.UUID("00000000-0000-0000-0000-000000000002")  # course held by the dummy dev student
     COURSE_1   = uuid.UUID("123e4567-e89b-12d3-a456-426614174000")
     COURSE_2   = uuid.UUID("00000000-0000-0000-0000-000000000010")
     COURSE_3   = uuid.UUID("00000000-0000-0000-0000-000000000011")
@@ -262,7 +262,7 @@ SEED_USERS: list[dict[str, Any]] = [
     },
     {
         "id": SeedIDs.PROF,
-        # This UUID is HARDCODED_TEACHER_ID in routers/course.py
+        # Professor who owns the seeded catalog courses (see SEED_COURSES)
         "email": "prof.smith@aitutor.edu",
         "first_name": "John",
         "last_name": "Smith",
@@ -281,12 +281,12 @@ SEED_USERS: list[dict[str, Any]] = [
 ]
 
 SEED_COURSES: list[dict[str, Any]] = [
-    # ── Special dev course (must match get_dev_course() in dependencies.py) ───
+    # ── Course held by the dummy student (gives the dev user data for the "Show mine" filter) ───
     {
         "id": SeedIDs.DEV_COURSE,
         "title": "Dev Course",
-        "description": "Auto-created dev course for testing.",
-        "held_by": SeedIDs.STUDENT,  # mirrors get_dev_course() which uses current_user.id
+        "description": "Sample course owned by the dummy dev student.",
+        "held_by": SeedIDs.STUDENT,  # the dummy dev user injected by get_current_user()
     },
     # ── Professor courses ─────────────────────────────────────────────────────
     {

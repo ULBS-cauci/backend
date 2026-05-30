@@ -15,20 +15,21 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-HARDCODED_TEACHER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
-
 
 @router.get("/", response_model=list[CourseDisplay])
-async def get_courses_by_teacher(
+async def list_courses(
+    mine: bool = False,
     course_service: CourseService = Depends(get_course_service),
+    current_user: User = Depends(get_current_user),
 ):
-    return await course_service.get_courses_by_teacher(HARDCODED_TEACHER_ID)
+    """List courses.
 
-
-@router.get("/all", response_model=list[CourseDisplay])
-async def get_all_courses(
-    course_service: CourseService = Depends(get_course_service),
-):
+    By default returns every course (the student-facing catalog view). Pass
+    ``?mine=true`` to return only courses held by the current user — this backs
+    the teacher "Show mine" filter.
+    """
+    if mine:
+        return await course_service.get_courses_by_teacher(current_user.id)
     return await course_service.get_all_courses()
 
  
@@ -45,8 +46,14 @@ async def upload_course_material(
     course_id: uuid.UUID,
     file: UploadFile = File(...),
     file_service: FileService = Depends(get_file_service),
+    course_service: CourseService = Depends(get_course_service),
     current_user: User = Depends(get_current_user),
 ):
+    if await course_service.get_course_by_id(course_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Course {course_id} not found.",
+        )
     try:
         return await file_service.upload_and_index(
             file, course_id=course_id, user_id=current_user.id
@@ -106,8 +113,9 @@ async def update_course(
 async def create_course(
     course_data: CourseCreate,
     course_service: CourseService = Depends(get_course_service),
+    current_user: User = Depends(get_current_user),
 ):
-    return await course_service.create_course(course_data, HARDCODED_TEACHER_ID)
+    return await course_service.create_course(course_data, current_user.id)
 
 
 @router.delete("/{course_id}", status_code=status.HTTP_204_NO_CONTENT)

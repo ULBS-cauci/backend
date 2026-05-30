@@ -74,7 +74,7 @@ async def lifespan(app: FastAPI):
         logger.info("Database engine disposed.")
 
 
-from app.api.routers import sessions, files, course
+from app.api.routers import sessions, course
 
 app = FastAPI(
     title="AI Tutor API",
@@ -92,7 +92,6 @@ app.add_middleware(
 )
 
 app.include_router(sessions.router, prefix="/api/v1/sessions", tags=["Sessions"])
-app.include_router(files.router,    prefix="/api/v1/files",    tags=["Files"])
 app.include_router(course.router,   prefix="/api/v1/courses",  tags=["Courses"])
 
 

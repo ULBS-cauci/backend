@@ -72,7 +72,8 @@ erDiagram
 
     attachments {
         UUID id PK
-        UUID message_id FK "Ref: messages.id"
+        UUID user_id FK "Ref: users.id"
+        UUID message_id FK "Ref: messages.id (nullable)"
         string file_name
         string object_storage_key
         datetime created_at
@@ -110,6 +111,7 @@ erDiagram
     users ||--o{ materials : "uploaded_by"
     users ||--o{ conversations : "participates_in"
     users ||--o{ system_prompts : "authored_by"
+    users ||--o{ attachments : "owns"
 
     %% Course Data
     courses ||--o{ materials : "contains"
@@ -195,6 +197,7 @@ classDiagram
 
     class Attachment {
         +UUID id
+        +UUID user_id
         +UUID message_id
         +String file_name
         +String object_storage_key
@@ -231,6 +234,7 @@ classDiagram
     User "1" --> "*" SystemPrompt : authors
     User "1" --> "*" Material : uploads
     User "1" --> "*" Conversation : participates
+    User "1" --> "*" Attachment : owns
 
     Course "1" *-- "*" Material : contains
     Course "1" <-- "*" Conversation : references
@@ -300,6 +304,7 @@ classDiagram
     class user_attachment {
         <<Attachment>>
         id: 39de18cc...
+        user_id: 4b29c122...
         message_id: 28bc9910...
         file_name: "my_notes.docx"
     }

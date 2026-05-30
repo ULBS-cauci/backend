@@ -34,8 +34,7 @@ app/
 │   ├── dependencies.py              ← get_current_user(), hardcoded UUIDs
 │   └── routers/
 │       ├── sessions.py              ← uses MessageCreate, ConversationPublic, MessagePublic
-│       ├── course.py                ← uses CourseCreate, CourseDisplay; HARDCODED_TEACHER_ID
-│       ├── files.py                 ← uses MaterialPublic; hardcoded course_id / user_id
+│       ├── course.py                ← uses CourseCreate, CourseDisplay, MaterialPublic (also handles material upload/preview)
 │       ├── auth.py                  ← uses UserCreate, UserPublic, UserRole
 │       └── admin.py                 ← uses SystemPromptPublic, LlmTipPublic (stub router)
 ├── services/
