@@ -1,7 +1,9 @@
 import logging
 import uuid
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, status
-from app.api.dependencies import get_course_service, get_file_service, get_current_user
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+
+from app.api.dependencies import get_course_service, get_current_user, get_file_service
 from app.services.course_service import CourseService
 from app.services.file_service import FileService
 from app.schemas.knowledge_schemas import MaterialPublic
@@ -19,6 +21,7 @@ async def upload_file(
     course_service: CourseService = Depends(get_course_service),
     current_user: User = Depends(get_current_user),
 ):
+    """Upload a document and enqueue it for background indexing."""
     course = await course_service.get_course_by_id(course_id)
     if course is None:
         raise HTTPException(
