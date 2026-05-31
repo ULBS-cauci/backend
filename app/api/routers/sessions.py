@@ -168,13 +168,18 @@ async def ask(
             )
 
     async def event_stream():
-        async for chunk in service.ask_stream(
-            query=payload.content,
-            user_id=current_user.id,
-            conversation_id=payload.conversation_id,
-            attachment_ids=payload.attachment_ids,
-        ):
-            yield f"data: {json.dumps(chunk)}\n\n"
+        try:
+            async for event in service.ask_stream(
+                query=payload.content,
+                user_id=current_user.id,
+                conversation_id=payload.conversation_id,
+                attachment_ids=payload.attachment_ids,
+            ):
+                yield f"data: {event.model_dump_json()}\n\n"
+        except HTTPException as exc:
+            yield f"data: {json.dumps({'type': 'error', 'message': exc.detail})}\n\n"
+        except Exception:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'An unexpected error occurred.'})}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
