@@ -2,9 +2,29 @@ from typing import Optional
 from datetime import datetime
 import uuid
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, DateTime, func
 
 from app.schemas.time_schema import TimestampSchema
+
+
+# ==========================================
+# TIP CATEGORY  (lookup / reference table)
+# ==========================================
+class TipCategoryBase(SQLModel):
+    name: str = Field(unique=True, max_length=100)
+
+
+class TipCategory(TipCategoryBase, TimestampSchema, table=True):
+    __tablename__ = "tip_categories"  # type: ignore
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+
+
+class TipCategoryCreate(TipCategoryBase):
+    pass
+
+
+class TipCategoryPublic(TipCategoryBase):
+    id: uuid.UUID
+    created_at: datetime
 
 
 # ==========================================
@@ -12,7 +32,7 @@ from app.schemas.time_schema import TimestampSchema
 # ==========================================
 class SystemPromptBase(SQLModel):
     title: Optional[str] = Field(default=None, max_length=255)
-    content: str
+    content: str  # maps to TEXT in PostgreSQL (no max_length)
 
 
 class SystemPrompt(SystemPromptBase, TimestampSchema, table=True):
@@ -32,9 +52,11 @@ class SystemPromptPublic(SystemPromptBase):
 # ==========================================
 class LlmTipBase(SQLModel):
     title: str = Field(max_length=255)
-    description: str
-    example_prompt: Optional[str] = Field(default=None)
-    category: Optional[str] = Field(default=None, max_length=100)
+    description: str  # maps to TEXT in PostgreSQL (no max_length)
+    example_prompt: Optional[str] = Field(default=None)  # TEXT
+    category_id: Optional[uuid.UUID] = Field(
+        default=None, foreign_key="tip_categories.id"
+    )
 
 
 class LlmTip(LlmTipBase, TimestampSchema, table=True):

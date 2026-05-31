@@ -50,7 +50,9 @@ class CourseService:
             output.append(display)
         return output
 
-    async def get_course_by_id(self, course_id: uuid.UUID) -> CourseDisplay | None:
+    async def get_course_by_id(
+        self, course_id: uuid.UUID
+    ) -> CourseDisplay | None:
         stmt = (
             select(Course, User)
             .outerjoin(User, Course.held_by == User.id)

@@ -16,6 +16,7 @@ Background path (OS thread → fresh asyncio event loop):
           Markdown splitter (thread-safe, no event-loop affinity).
 """
 import asyncio
+from typing import AsyncGenerator
 import logging
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -306,15 +307,25 @@ class FileService:
         result = await self.db.exec(
             select(Material).where(Material.course_id == course_id)
         )
-        materials = result.all()
-        output: list[MaterialPublic] = []
-        for material in materials:
-            preview_url: Optional[str] = None
-            if material.object_storage_key:
-                preview_url = await self.object_storage.generate_presigned_url(
-                    MINIO_MATERIALS_BUCKET, material.object_storage_key
-                )
-            public = MaterialPublic.model_validate(material)
-            public.preview_url = preview_url
-            output.append(public)
-        return output
+        return [MaterialPublic.model_validate(m) for m in result.all()]
+
+    async def get_material_stream(
+        self, course_id: uuid.UUID, material_id: uuid.UUID
+    ) -> tuple[str, AsyncGenerator[bytes, None]] | None:
+        """
+        Returns (filename, byte_stream) for the material, or None if not found.
+        Verifies the material belongs to the given course before streaming.
+        """
+        result = await self.db.exec(
+            select(Material).where(
+                Material.id == material_id,
+                Material.course_id == course_id,
+            )
+        )
+        material = result.one_or_none()
+        if material is None or not material.object_storage_key:
+            return None
+        stream = self.object_storage.stream_file(
+            MINIO_MATERIALS_BUCKET, material.object_storage_key
+        )
+        return material.file_name, stream

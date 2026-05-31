@@ -57,6 +57,9 @@ Thumbs.db
 .Spotlight-V100
 .Trashes
 
+# Local dependency overrides (machine-specific, never committed)
+requirements.local.txt
+
 # Misc
 .cache
 .mypy_cache/
@@ -68,4 +71,4 @@ dmypy.json
 # Docker volume data (paths match docker-compose.yml mounts in backend/)
 data/
 
-scripts/
+scripts/seed_materials
