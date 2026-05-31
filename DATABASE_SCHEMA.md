@@ -53,12 +53,14 @@ erDiagram
         string sender "User, System, AI"
         string content
         string output_type_requested
+        json sources "nullable - array of SourceReference"
         datetime created_at
     }
 
     attachments {
         UUID id PK
-        UUID message_id FK "Ref: messages.id"
+        UUID user_id FK "Ref: users.id"
+        UUID message_id FK "Ref: messages.id, nullable"
         string file_name
         string object_storage_key
         datetime created_at
@@ -90,7 +92,7 @@ erDiagram
         datetime created_at
     }
 
-    %% Relationships (Restructured for better layout)
+    %% Relationships
     %% Identity & Setup
     users ||--o{ courses : "creates"
     
@@ -100,13 +102,37 @@ erDiagram
     
     system_prompts }o--|| users : "authored_by"
 
-    %% Chat System Sub-graph
+    %% Chat System
     courses ||--o{ conversations : "context_for"
     users ||--o{ conversations : "participates_in"
     
     conversations ||--o{ messages : "contains"
     conversations ||--o| shared_links : "generates"
     messages ||--o{ attachments : "includes"
+    attachments }o--|| users : "owned_by"
+```
+
+## JSON Column: `messages.sources`
+
+The `sources` column stores the RAG retrieval sources used to generate each AI response. It is `NULL` for user and system messages, and populated for AI messages that had matching materials in Qdrant.
+
+Schema of each element in the JSON array:
+
+| Field | Type | Description |
+|---|---|---|
+| `material_id` | UUID string | FK to `materials.id` |
+| `file_name` | string | Display name of the source file |
+| `download_url` | string | Relative API path — `/api/v1/files/{material_id}/download` |
+
+Example value:
+```json
+[
+  {
+    "material_id": "9d123bca-...",
+    "file_name": "lecture1.pdf",
+    "download_url": "/api/v1/files/9d123bca-.../download"
+  }
+]
 ```
 
 ## Class Diagram
@@ -161,11 +187,13 @@ classDiagram
         +String sender
         +String content
         +String output_type_requested
+        +JSON sources
         +DateTime created_at
     }
 
     class Attachment {
         +UUID id
+        +UUID user_id
         +UUID message_id
         +String file_name
         +String object_storage_key
@@ -197,16 +225,16 @@ classDiagram
         +DateTime created_at
     }
 
-    %% Relationships as Class Dependencies / Composition
+    %% Relationships
     User "1" --> "*" Course : creates
     User "1" --> "*" SystemPrompt : authors
     User "1" --> "*" Material : uploads
-    User "1" --> "*" Conversation : participates 
+    User "1" --> "*" Conversation : participates
+    User "1" --> "*" Attachment : owns
     
     Course "1" *-- "*" Material : contains
-    Course "1" *-- "*" SystemPrompt : configures
     Course "1" <-- "*" Conversation : references
-    n "1" *-- "*" Message : owns
+    Conversation "1" *-- "*" Message : owns
     Conversation "1" *-- "0..1" SharedLink : generates
     
     Message "1" *-- "*" Attachment : includes
@@ -237,9 +265,9 @@ classDiagram
         <<Course>>
         id: c382901a...
         title: "Introduction to AI"
-        created_by: 7f1a3b10...
+        held_by: 7f1a3b10...
     }
-hel
+
     class lecture_slides {
         <<Material>>
         id: 9d123bca...
@@ -256,17 +284,19 @@ hel
         course_id: c382901a...
     }
     
-    class current_message {
+    class ai_response {
         <<Message>>
         id: 28bc9910...
         conversation_id: 11eeb229...
-        sender: "User"
-        content: "Can you explain backpropagation?"
+        sender: "AI"
+        content: "Backpropagation is..."
+        sources: "[{material_id: 9d123bca...}]"
     }
 
     class user_attachment {
         <<Attachment>>
         id: 39de18cc...
+        user_id: 4b29c122...
         message_id: 28bc9910...
         file_name: "my_notes.docx"
     }
@@ -279,6 +309,6 @@ hel
     student_jane ..> jane_conversation : participates
     jane_conversation ..> ai_course : context
     
-    jane_conversation *-- current_message : owns
-    current_message *-- user_attachment : contains
+    jane_conversation *-- ai_response : owns
+    ai_response *-- user_attachment : contains
 ```
