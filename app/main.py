@@ -14,8 +14,8 @@ logger = logging.getLogger("uvicorn.error")
 from app.schemas.course_schemas import Course
 from app.schemas.user_schemas import User
 from app.schemas.knowledge_schemas import Material
-from app.schemas.chat_schemas import Conversation, Message, Attachment, SharedLink
-from app.schemas.admin_schemas import SystemPrompt, LlmTip
+from app.schemas.chat_schemas import Conversation, Message, Attachment, SharedLink, OutputFormat
+from app.schemas.admin_schemas import SystemPrompt, LlmTip, TipCategory
 
 from app.api.dependencies import (
     _get_async_engine,
@@ -74,7 +74,7 @@ async def lifespan(app: FastAPI):
         logger.info("Database engine disposed.")
 
 
-from app.api.routers import sessions, files, course
+from app.api.routers import sessions, course
 
 app = FastAPI(
     title="AI Tutor API",
@@ -92,7 +92,6 @@ app.add_middleware(
 )
 
 app.include_router(sessions.router, prefix="/api/v1/sessions", tags=["Sessions"])
-app.include_router(files.router,    prefix="/api/v1/files",    tags=["Files"])
 app.include_router(course.router,   prefix="/api/v1/courses",  tags=["Courses"])
 
 

@@ -3,8 +3,7 @@ from datetime import datetime, timezone
 import uuid
 from enum import Enum
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, DateTime, func, JSON
-from pydantic import BaseModel
+from sqlalchemy import Column, JSON
 
 from app.schemas.time_schema import TimeSchema, TimestampSchema
 from app.schemas.source_schemas import SourceReference
@@ -13,6 +12,28 @@ class MessageSender(str, Enum):
     USER = "User"
     SYSTEM = "System"
     AI = "AI"
+
+# ==========================================
+# OUTPUT FORMAT  (lookup / reference table)
+# ==========================================
+class OutputFormatBase(SQLModel):
+    name: str = Field(unique=True, max_length=100)
+    description: Optional[str] = Field(default=None)
+
+
+class OutputFormat(OutputFormatBase, TimestampSchema, table=True):
+    __tablename__ = "output_formats"  # type: ignore
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+
+
+class OutputFormatCreate(OutputFormatBase):
+    pass
+
+
+class OutputFormatPublic(OutputFormatBase):
+    id: uuid.UUID
+    created_at: datetime
+
 
 # ==========================================
 # CHAT CONVERSATION
@@ -40,8 +61,10 @@ class ConversationPublic(ConversationBase):
 class MessageBase(SQLModel):
     conversation_id: uuid.UUID = Field(foreign_key="conversations.id")
     sender: MessageSender
-    content: str
-    output_type_requested: Optional[str] = Field(default=None, max_length=100)
+    content: str  # maps to TEXT in PostgreSQL (no max_length)
+    output_format_id: Optional[uuid.UUID] = Field(
+        default=None, foreign_key="output_formats.id"
+    )
 
 class Message(MessageBase, TimestampSchema, table=True):
     __tablename__ = "messages"  # type: ignore
@@ -51,7 +74,10 @@ class Message(MessageBase, TimestampSchema, table=True):
 class MessageCreate(SQLModel):
     conversation_id: Optional[uuid.UUID] = None
     content: str = Field(..., min_length=5, description="The content of the message.")
-    output_type_requested: Optional[str] = Field(default=None, max_length=100)
+    output_format_id: Optional[uuid.UUID] = Field(
+        default=None,
+        description="Optional FK to output_formats — specifies the desired response format.",
+    )
     attachment_ids: List[uuid.UUID] = Field(default_factory=list)
 
 # ==========================================
@@ -81,9 +107,9 @@ class MessagePublic(MessageBase):
 # ==========================================
 # SHARED LINK
 # ==========================================
-class SharedLinkBase(SQLModel): #
+class SharedLinkBase(SQLModel):
     conversation_id: uuid.UUID = Field(foreign_key="conversations.id")
-    token: str = Field(unique=True, max_length=64) # 
+    token: str = Field(unique=True, max_length=64)
     expires_at: Optional[datetime] = Field(default=None)
 
 class SharedLink(SharedLinkBase, TimestampSchema, table=True):

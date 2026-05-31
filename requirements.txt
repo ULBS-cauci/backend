@@ -11,3 +11,4 @@ langchain-text-splitters
 fastembed>=0.5.0
 sentence-transformers
 FlagEmbedding>=1.2.0
+torch

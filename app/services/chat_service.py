@@ -403,7 +403,7 @@ class ChatService:
             SourceReference(
                 material_id=mat.id,
                 file_name=mat.file_name,
-                download_url=f"/api/v1/files/{mat.id}/download",
+                download_url=f"/api/v1/courses/{mat.course_id}/materials/{mat.id}/download",
             )
             for mat in materials
         ]
