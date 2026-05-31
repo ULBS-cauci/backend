@@ -724,32 +724,40 @@ async def seed_materials_embed(
 
     # ── Wire up FileService using the cached private factories ────────────────
     # These are the same @lru_cache singletons the running app uses.
+    from concurrent.futures import ThreadPoolExecutor
+
     from app.api.dependencies import (
         _get_bgem3_sparse_encoder,
+        _get_docling_converter,
+        _get_markdown_splitter,
         _get_minio_client,
-        _get_ollama_embedding_client,
-        _get_qdrant_client,
-        _get_text_splitter,
+        make_ingestion_embedding,
+        make_ingestion_object_storage,
+        make_ingestion_vector_db,
     )
     from app.services.file_service import FileService
 
     logger.info(
         "Initialising sparse encoder (BGE-M3, ~570 MB download on first use)..."
     )
-    sparse_encoder = await asyncio.to_thread(_get_bgem3_sparse_encoder)
+    await asyncio.to_thread(_get_bgem3_sparse_encoder)  # pre-warm lru_cache; first call downloads ~570 MB
 
+    executor = ThreadPoolExecutor(max_workers=2)
     minio = _get_minio_client()
     await minio.connect()
     try:
         await minio.create_bucket(MINIO_MATERIALS_BUCKET)
 
         file_service = FileService(
-            vector_db=_get_qdrant_client(),
-            embed_client=_get_ollama_embedding_client(),
             object_storage=minio,
-            sparse_encoder=sparse_encoder,
             db=session,
-            text_splitter=_get_text_splitter(),
+            executor=executor,
+            make_ingestion_object_storage=make_ingestion_object_storage,
+            make_ingestion_embedding=make_ingestion_embedding,
+            make_ingestion_vector_db=make_ingestion_vector_db,
+            get_ingestion_sparse_encoder=_get_bgem3_sparse_encoder,
+            get_ingestion_document_converter=_get_docling_converter,
+            get_ingestion_text_splitter=_get_markdown_splitter,
         )
 
         results = []
@@ -776,6 +784,7 @@ async def seed_materials_embed(
         return results
     finally:
         await minio.close()
+        executor.shutdown(wait=True)
 
 
 # ── material dispatcher ───────────────────────────────────────────────────────
