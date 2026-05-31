@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from docling.document_converter import DocumentConverter
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
@@ -299,6 +299,21 @@ class FileService:
             finally:
                 await minio.close()
                 await engine.dispose()
+
+    async def download_material(
+        self, material_id: uuid.UUID
+    ) -> tuple[bytes, str, str]:
+        """Return (bytes, file_name, content_type) for a material. Raises 404 if missing."""
+        material = await self.db.get(Material, material_id)
+        if material is None:
+            raise HTTPException(status_code=404, detail="Material not found")
+        data = await self.object_storage.download_file(
+            MINIO_MATERIALS_BUCKET, material.object_storage_key
+        )
+        content_type = _CONTENT_TYPE_BY_EXTENSION.get(
+            material.file_type or "", "application/octet-stream"
+        )
+        return data, material.file_name, content_type
 
     async def get_materials_by_course(
         self, course_id: uuid.UUID

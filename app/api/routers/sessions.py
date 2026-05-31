@@ -24,6 +24,7 @@ from app.schemas.chat_schemas import (
     MessageCreate,
     MessagePublic,
 )
+from app.schemas.source_schemas import SourcesEvent
 from app.schemas.user_schemas import User
 from app.services.chat_service import ChatService
 
@@ -168,13 +169,20 @@ async def ask(
             )
 
     async def event_stream():
-        async for chunk in service.ask_stream(
+        async for item in service.ask_stream(
             query=payload.content,
             user_id=current_user.id,
             conversation_id=payload.conversation_id,
             attachment_ids=payload.attachment_ids,
         ):
-            yield f"data: {json.dumps(chunk)}\n\n"
+            if isinstance(item, SourcesEvent):
+                payload_data = {
+                    "type": "sources",
+                    "sources": [s.model_dump(mode="json") for s in item.sources],
+                }
+            else:
+                payload_data = {"type": "content", "chunk": item}
+            yield f"data: {json.dumps(payload_data)}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
