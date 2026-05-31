@@ -50,7 +50,9 @@ class CourseService:
             output.append(display)
         return output
 
-    async def get_course_by_id(self, course_id: uuid.UUID) -> CourseDisplay | None:
+    async def get_course_by_id(
+        self, course_id: uuid.UUID
+    ) -> CourseDisplay | None:
         stmt = (
             select(Course, User)
             .outerjoin(User, Course.held_by == User.id)
@@ -109,10 +111,15 @@ class CourseService:
                 await self.object_storage.delete_file(
                     MINIO_MATERIALS_BUCKET, material.object_storage_key
                 )
-            if material.vector_namespace and material.file_name:
-                await self.vector_db.delete_chunks_by_source(
-                    material.vector_namespace, material.file_name
-                )
+            if material.vector_namespace:
+                if material.object_storage_key:
+                    await self.vector_db.delete_chunks_by_source(
+                        material.vector_namespace, material.object_storage_key
+                    )
+                elif material.file_name:
+                    await self.vector_db.delete_chunks_by_source(
+                        material.vector_namespace, material.file_name
+                    )
             await self.db.delete(material)
         await self.db.flush()
         course = await self.db.get(Course, course_id)

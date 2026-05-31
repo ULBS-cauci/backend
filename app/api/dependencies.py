@@ -1,5 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 import uuid
 from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
 from app.data_access.clients.bm25_client import BM25SparseEncoder
@@ -21,6 +22,7 @@ from app.core.config import (
     BM25Settings,
     BGEM3Settings,
     ChunkingSettings,
+    ExecutorSettings,
 )
 
 from app.data_access.interfaces.embedding import EmbeddingInterface
@@ -42,6 +44,8 @@ from app.services.file_service import FileService
 
 from app.data_access.interfaces.text_splitter import TextSplitterInterface
 from app.data_access.clients.langchain_splitter_client import LangChainRecursiveSplitterClient
+from app.data_access.clients.markdown_splitter_client import MarkdownSplitterClient
+from docling.document_converter import DocumentConverter
 
 @lru_cache()
 def get_app_settings() -> AppSettings:
@@ -136,6 +140,77 @@ def get_text_splitter() -> TextSplitterInterface:
     return _get_text_splitter()
 
 
+@lru_cache()
+def _get_markdown_splitter() -> MarkdownSplitterClient:
+    """Caches the Markdown-aware splitter (used by the Docling ingestion pipeline)."""
+    chunking_settings = get_chunking_settings()
+    return MarkdownSplitterClient(
+        chunk_size=chunking_settings.CHUNK_SIZE,
+        chunk_overlap=chunking_settings.CHUNK_OVERLAP,
+    )
+
+
+def get_markdown_splitter() -> TextSplitterInterface:
+    """Yields the Markdown-aware text splitter."""
+    return _get_markdown_splitter()
+
+
+@lru_cache()
+def _get_docling_converter() -> DocumentConverter:
+    """Instantiates Docling's DocumentConverter exactly once.
+
+    DocumentConverter loads OCR + layout models on first call.
+    It is stateless and thread-safe for concurrent convert() calls on distinct file paths.
+    """
+    return DocumentConverter()
+
+
+def create_ingestion_executor() -> ThreadPoolExecutor:
+    """Creates the ThreadPoolExecutor for background ingestion.
+
+    Called once during lifespan startup; the result is stored on app.state.
+    """
+    settings = ExecutorSettings()  # type: ignore
+    return ThreadPoolExecutor(max_workers=settings.INGESTION_MAX_WORKERS)
+
+
+def get_ingestion_executor(request: Request) -> ThreadPoolExecutor:
+    """Returns the app-level ingestion ThreadPoolExecutor stored on app.state."""
+    return request.app.state.executor
+
+
+def make_ingestion_object_storage() -> ObjectStorageInterface:
+    """Factory for a fresh ObjectStorage client bound to the ingestion event loop."""
+    app = get_app_settings()
+    if app.OBJECT_STORAGE_CLIENT_TYPE == "minio":
+        s = MinIOSettings()  # type: ignore
+        return MinIOClient(
+            endpoint_url=s.MINIO_ENDPOINT,
+            access_key=s.MINIO_USER,
+            secret_key=s.MINIO_PASSWORD,
+            use_ssl=s.MINIO_USE_SSL,
+        )
+    raise ValueError(f"Unsupported Object Storage type: {app.OBJECT_STORAGE_CLIENT_TYPE}")
+
+
+def make_ingestion_embedding() -> EmbeddingInterface:
+    """Factory for a fresh Embedding client bound to the ingestion event loop."""
+    app = get_app_settings()
+    if app.EMBEDDING_CLIENT_TYPE == "ollama":
+        s = OllamaSettings()  # type: ignore
+        return OllamaEmbeddingClient(host=s.OLLAMA_HOST, model_name=s.OLLAMA_EMBED_MODEL)
+    raise ValueError(f"Unsupported Embedding Client type: {app.EMBEDDING_CLIENT_TYPE}")
+
+
+def make_ingestion_vector_db() -> VectorDBInterface:
+    """Factory for a fresh VectorDB client bound to the ingestion event loop."""
+    app = get_app_settings()
+    if app.VECTOR_DB_CLIENT_TYPE == "qdrant":
+        s = QdrantSettings()  # type: ignore
+        return QdrantClient(endpoint=s.QDRANT_ENDPOINT, api_key=s.QDRANT_API_KEY)
+    raise ValueError(f"Unsupported Vector Database type: {app.VECTOR_DB_CLIENT_TYPE}")
+
+
 def get_object_storage_client(
     app: AppSettings = Depends(get_app_settings),
 ) -> ObjectStorageInterface:
@@ -221,27 +296,6 @@ async def get_current_user(
     return user
 
 
-async def get_dev_course(
-    db: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
-):
-    from app.schemas.course_schemas import Course
-
-    dummy_id = uuid.UUID("00000000-0000-0000-0000-000000000002")
-    course = await db.get(Course, dummy_id)
-    if not course:
-        course = Course(
-            id=dummy_id,
-            title="Dev Course",
-            description="Auto-created dev course for testing.",
-            held_by=current_user.id,
-        )
-        db.add(course)
-        await db.commit()
-        await db.refresh(course)
-    return course
-
-
 @lru_cache()
 def _get_bm25_sparse_encoder() -> BM25SparseEncoder:
     """Instantiates and caches the BM25 sparse encoder. Downloads vocabulary on first call."""
@@ -311,22 +365,23 @@ def get_chat_service(
         score_threshold=cross_encoder_settings.CROSS_ENCODER_SCORE_THRESHOLD,
         db_session=db_session,
         object_storage=object_storage,
+        document_converter=_get_docling_converter(),
     )
 
 
 def get_file_service(
-    vector_db: VectorDBInterface = Depends(get_vector_db_client),
-    embed_client: EmbeddingInterface = Depends(get_embedding_client),
     object_storage: ObjectStorageInterface = Depends(get_object_storage_client),
-    sparse_encoder: SparseEncoderInterface = Depends(get_sparse_encoder),
-    text_splitter: TextSplitterInterface = Depends(get_text_splitter),
     db: AsyncSession = Depends(get_db_session),
+    executor: ThreadPoolExecutor = Depends(get_ingestion_executor),
 ) -> FileService:
     return FileService(
-        vector_db=vector_db, 
-        embed_client=embed_client, 
         object_storage=object_storage,
-        sparse_encoder=sparse_encoder,
-        text_splitter=text_splitter,
-        db=db
+        db=db,
+        executor=executor,
+        make_ingestion_object_storage=make_ingestion_object_storage,
+        make_ingestion_embedding=make_ingestion_embedding,
+        make_ingestion_vector_db=make_ingestion_vector_db,
+        get_ingestion_sparse_encoder=_get_bgem3_sparse_encoder,
+        get_ingestion_document_converter=_get_docling_converter,
+        get_ingestion_text_splitter=_get_markdown_splitter,
     )

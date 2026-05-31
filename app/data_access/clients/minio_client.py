@@ -1,5 +1,5 @@
 from contextlib import AsyncExitStack
-from typing import List, Optional
+from typing import AsyncGenerator, List, Optional
 
 import aioboto3
 from botocore.exceptions import ClientError
@@ -102,6 +102,24 @@ class MinIOClient(ObjectStorageInterface):
                     f"'{object_key}' not found in bucket '{bucket_name}'"
                 ) from exc
             raise
+
+    async def stream_file(
+        self,
+        bucket_name: str,
+        object_key: str,
+        chunk_size: int = 65536,
+    ) -> AsyncGenerator[bytes, None]:
+        self._require_connected()
+        try:
+            response = await self._client.get_object(Bucket=bucket_name, Key=object_key)
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] in ("404", "NoSuchKey"):
+                raise FileNotFoundError(
+                    f"'{object_key}' not found in bucket '{bucket_name}'"
+                ) from exc
+            raise
+        async for chunk in response["Body"].iter_chunks(chunk_size):
+            yield chunk
 
     async def delete_file(self, bucket_name: str, object_key: str) -> bool:
         self._require_connected()

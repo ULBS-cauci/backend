@@ -29,7 +29,8 @@ from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
 from app.data_access.interfaces.reranker import RerankerInterface
-from app.workers.ingestion_worker import extract_text_from_pdf
+from docling.document_converter import DocumentConverter
+from app.workers.ingestion_worker import extract_text_with_docling
 
 from fastapi import HTTPException, status
 from app.core.config import MINIO_ATTACHMENTS_BUCKET, QDRANT_MATERIALS_COLLECTION
@@ -56,6 +57,7 @@ class ChatService:
         score_threshold: float,
         db_session: AsyncSession,
         object_storage: ObjectStorageInterface,
+        document_converter: DocumentConverter,
     ):
         self.vector_db = vector_db
         self.embedding_client = embedding_client
@@ -65,6 +67,7 @@ class ChatService:
         self.score_threshold = score_threshold
         self.db_session = db_session
         self.object_storage = object_storage
+        self._document_converter = document_converter
 
     async def create_conversation(self, user_id: uuid.UUID) -> Conversation:
         conversation = Conversation(
@@ -307,7 +310,9 @@ class ChatService:
                 pdf_bytes = await self.object_storage.download_file(
                     MINIO_ATTACHMENTS_BUCKET, attachment.object_storage_key
                 )
-                text = await asyncio.to_thread(extract_text_from_pdf, pdf_bytes)
+                text = await asyncio.to_thread(
+                    extract_text_with_docling, pdf_bytes, attachment.file_name, self._document_converter
+                )
             except (FileNotFoundError, ValueError) as exc:
                 logger.warning(
                     f"Skipping attachment {attachment.id} ({attachment.file_name}): {exc}"
