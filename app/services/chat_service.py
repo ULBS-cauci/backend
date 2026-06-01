@@ -181,7 +181,7 @@ class ChatService:
                 user_message.id, attachment_ids, user_id
             )
 
-        if not context and not attachment_texts:
+        if not context and not attachment_texts and not history:
             yield ChunkEvent(content=_NO_CONTEXT_FALLBACK)
             await self._persist_message(conversation_id, MessageSender.AI, _NO_CONTEXT_FALLBACK)
             return
