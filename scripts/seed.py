@@ -61,6 +61,7 @@ from app.schemas.chat_schemas import (
     Conversation,
     Message,
     MessageSender,
+    OutputFormat,
     SharedLink,
 )
 from app.schemas.course_schemas import Course
@@ -187,6 +188,11 @@ class SeedIDs:
     CAT_1 = uuid.UUID("00000000-0000-0000-0000-000000000080")  # Prompting Strategy
     CAT_2 = uuid.UUID("00000000-0000-0000-0000-000000000081")  # Learning Technique
     CAT_3 = uuid.UUID("00000000-0000-0000-0000-000000000082")  # Context Usage
+
+    # ── Output formats ────────────────────────────────────────────────────────
+    OUTPUT_FORMAT_INFO_CARDS = uuid.UUID("00000000-0000-0000-0000-0000000f0001")
+    OUTPUT_FORMAT_QUIZ       = uuid.UUID("00000000-0000-0000-0000-0000000f0002")
+    OUTPUT_FORMAT_DIAGRAM    = uuid.UUID("00000000-0000-0000-0000-0000000f0003")
 
 
 # ── reset: reverse FK order ───────────────────────────────────────────────────
@@ -541,6 +547,24 @@ SEED_TIP_CATEGORIES: list[dict[str, Any]] = [
     },
 ]
 
+SEED_OUTPUT_FORMATS: list[dict[str, Any]] = [
+    {
+        "id": SeedIDs.OUTPUT_FORMAT_INFO_CARDS,
+        "name": "info_cards",
+        "description": "Key concepts distilled into compact cards.",
+    },
+    {
+        "id": SeedIDs.OUTPUT_FORMAT_QUIZ,
+        "name": "quiz",
+        "description": "Practice questions (true/false, short answer, or multiple choice).",
+    },
+    {
+        "id": SeedIDs.OUTPUT_FORMAT_DIAGRAM,
+        "name": "diagram",
+        "description": "A Mermaid diagram rendered inside the answer.",
+    },
+]
+
 SEED_LLM_TIPS: list[dict[str, Any]] = [
     {
         "id": SeedIDs.TIP_1,
@@ -867,6 +891,17 @@ async def seed_tip_categories(session: AsyncSession, dry_run: bool) -> list[TipC
     return results
 
 
+async def seed_output_formats(session: AsyncSession, dry_run: bool) -> list[OutputFormat]:
+    results: list[OutputFormat] = []
+    for data in SEED_OUTPUT_FORMATS:
+        instance = OutputFormat(**data)
+        saved = await _upsert(
+            session, OutputFormat, data["id"], instance, dry_run, "OutputFormat"
+        )
+        results.append(saved)
+    return results
+
+
 async def seed_llm_tips(session: AsyncSession, dry_run: bool) -> list[LlmTip]:
     results: list[LlmTip] = []
     for data in SEED_LLM_TIPS:
@@ -896,6 +931,7 @@ async def run_seed(
         # Materials may commit internally (embed mode) — must run before other
         # flushed-but-not-committed records accumulate in the session.
         await seed_materials(session, dry_run, courses, embed_folder)
+        await seed_output_formats(session, dry_run)  # parent of messages.output_format_id
         conversations = await seed_conversations(session, dry_run, users, courses)
         await seed_messages(session, dry_run, conversations)
         await seed_shared_links(session, dry_run, conversations)

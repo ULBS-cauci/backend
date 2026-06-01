@@ -6,6 +6,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.dependencies import (
@@ -23,6 +24,7 @@ from app.schemas.chat_schemas import (
     ConversationPublic,
     MessageCreate,
     MessagePublic,
+    OutputFormatPublic,
 )
 from app.schemas.user_schemas import User
 from app.services.chat_service import ChatService
@@ -46,6 +48,38 @@ async def create_conversation(
     service: ChatService = Depends(get_chat_service),
 ):
     return await service.create_conversation(user_id=current_user.id)
+
+
+class GradeAnswerRequest(BaseModel):
+    question: str
+    reference_answer: str
+    student_answer: str
+
+
+class GradeAnswerResponse(BaseModel):
+    correct: bool
+    feedback: str
+
+
+@router.post("/grade-answer", response_model=GradeAnswerResponse)
+async def grade_answer(
+    payload: GradeAnswerRequest,
+    service: ChatService = Depends(get_chat_service),
+):
+    result = await service.grade_free_text_answer(
+        payload.question, payload.reference_answer, payload.student_answer
+    )
+    return GradeAnswerResponse(
+        correct=bool(result.get("correct", False)),
+        feedback=str(result.get("feedback", "")),
+    )
+
+
+@router.get("/output-formats", response_model=List[OutputFormatPublic])
+async def list_output_formats(
+    service: ChatService = Depends(get_chat_service),
+):
+    return await service.list_output_formats()
 
 
 @router.get("/{conversation_id}/messages", response_model=List[MessagePublic])
@@ -174,6 +208,7 @@ async def ask(
                 user_id=current_user.id,
                 conversation_id=payload.conversation_id,
                 attachment_ids=payload.attachment_ids,
+                output_format_id=payload.output_format_id,
             ):
                 yield f"data: {event.model_dump_json()}\n\n"
         except HTTPException as exc:
