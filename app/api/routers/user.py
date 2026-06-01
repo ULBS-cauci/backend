@@ -39,9 +39,7 @@ async def get_settings(
             user_id=current_user.id,
             custom_system_prompt=None,
             selected_system_prompt_id=None,
-            updated_at=datetime.datetime.now(datetime.timezone.utc).replace(
-                tzinfo=None
-            ),
+            updated_at=None,
         )
     return row
 

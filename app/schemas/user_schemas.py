@@ -80,4 +80,4 @@ class UserSettingUpdate(SQLModel):
 
 class UserSettingPublic(UserSettingBase):
     user_id: uuid.UUID
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
