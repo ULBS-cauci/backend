@@ -17,7 +17,6 @@ from app.schemas.chat_schemas import (
     AttachmentPublic,
     ChunkEvent,
     Conversation,
-    ErrorEvent,
     Message,
     MessagePublic,
     MessageSender,
@@ -38,12 +37,22 @@ from app.core.config import MINIO_ATTACHMENTS_BUCKET, QDRANT_MATERIALS_COLLECTIO
 TUTOR_SYSTEM_PROMPT = (
     "You are a university tutor for the AI Tutor platform. "
     "Help students understand concepts clearly and concisely. "
-    "If you are not sure about something, say so."
+    "If you are not sure about something, say so. "
+    "Always respond in the same language the student used in their question."
 )
 
 # Bounds on attachment text injected into the LLM prompt to prevent context blow-up / DoS.
 MAX_ATTACHMENT_CHARS = 10_000
 MAX_TOTAL_ATTACHMENT_CHARS = 30_000
+
+_NO_CONTEXT_FALLBACK = (
+    "Ne pare rău, pot răspunde doar la întrebări bazate pe materialele de curs "
+    "încărcate pe această platformă. Nu am găsit conținut relevant în baza de "
+    "cunoștințe pentru întrebarea ta.\n\n"
+    "I'm sorry, but I can only answer questions based on the course materials "
+    "that have been uploaded to this platform. I couldn't find any relevant content "
+    "in the knowledge base for your question."
+)
 
 
 class ChatService:
@@ -163,9 +172,6 @@ class ChatService:
             search_query, collection_name=QDRANT_MATERIALS_COLLECTION
         )
 
-        messages = self._build_context_messages(
-            history, context, query, attachment_texts
-        )
         user_message = await self._persist_message(
             conversation_id, MessageSender.USER, query, flush_only=bool(attachment_ids)
         )
@@ -173,6 +179,15 @@ class ChatService:
             await self._link_attachments_to_message(
                 user_message.id, attachment_ids, user_id
             )
+
+        if not context and not attachment_texts:
+            yield ChunkEvent(content=_NO_CONTEXT_FALLBACK)
+            await self._persist_message(conversation_id, MessageSender.AI, _NO_CONTEXT_FALLBACK)
+            return
+
+        messages = self._build_context_messages(
+            history, context, query, attachment_texts
+        )
 
         yield StatusEvent(message="Generating answer...")
         chunks = []
@@ -185,7 +200,7 @@ class ChatService:
     async def regenerate_stream(
         self,
         conversation_id: uuid.UUID,
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[StreamEvent]:
         all_messages = await self.get_conversation_messages(conversation_id)
 
         if not all_messages or all_messages[-1].sender != MessageSender.AI:
@@ -211,60 +226,31 @@ class ChatService:
         last_user_idx = next(i for i, m in enumerate(all_messages) if m.id == last_user_msg.id)
         context_history = all_messages[:last_user_idx]
         query = last_user_msg.content
-        llm_messages = await self._prepare_llm_messages(conversation_id, query, history=context_history)
+
+        yield StatusEvent(message="Thinking about your question...")
+        search_query = await self._condense_query(context_history, query)
+        yield StatusEvent(message="Searching the knowledge base...")
+        context = await self._retrieve_relevant_chunks(
+            search_query, collection_name=QDRANT_MATERIALS_COLLECTION
+        )
+
+        if not context:
+            yield ChunkEvent(content=_NO_CONTEXT_FALLBACK)
+            await self._persist_message(conversation_id, MessageSender.AI, _NO_CONTEXT_FALLBACK)
+            return
+
+        llm_messages = self._build_context_messages(context_history, context, query)
 
         conversation = await self.db_session.get(Conversation, conversation_id)
         conversation.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
         self.db_session.add(conversation)
         await self.db_session.flush()
 
+        yield StatusEvent(message="Generating answer...")
         chunks: list[str] = []
         async for chunk in self.llm_client.stream(llm_messages):
             chunks.append(chunk)
             yield ChunkEvent(content=chunk)
-
-        await self._persist_message(conversation_id, MessageSender.AI, "".join(chunks))
-
-    async def regenerate_stream(
-        self,
-        conversation_id: uuid.UUID,
-    ) -> AsyncIterator[str]:
-        all_messages = await self.get_conversation_messages(conversation_id)
-
-        if not all_messages or all_messages[-1].sender != MessageSender.AI:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Last message is not an AI response; nothing to regenerate",
-            )
-        last_ai_msg = all_messages[-1]
-
-        last_user_msg = next(
-            (m for m in reversed(all_messages[:-1]) if m.sender == MessageSender.USER),
-            None,
-        )
-        if last_user_msg is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No user message found to regenerate from",
-            )
-
-        await self.db_session.delete(last_ai_msg)
-        await self.db_session.commit()
-
-        last_user_idx = next(i for i, m in enumerate(all_messages) if m.id == last_user_msg.id)
-        context_history = all_messages[:last_user_idx]
-        query = last_user_msg.content
-        llm_messages = await self._prepare_llm_messages(conversation_id, query, history=context_history)
-
-        conversation = await self.db_session.get(Conversation, conversation_id)
-        conversation.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
-        self.db_session.add(conversation)
-        await self.db_session.flush()
-
-        chunks: list[str] = []
-        async for chunk in self.llm_client.stream(llm_messages):
-            chunks.append(chunk)
-            yield chunk
 
         await self._persist_message(conversation_id, MessageSender.AI, "".join(chunks))
 
@@ -303,17 +289,13 @@ class ChatService:
         logger.info(f"Condensed query: '{query}' → '{condensed}'")
         return condensed
 
-    async def _build_context_messages(
+    def _build_context_messages(
         self,
         history: List[Message],
         context: str,
         query: str,
         attachment_texts: Optional[List[str]] = None,
     ) -> List[ChatMessage]:
-        if history is None:
-            history = await self.get_conversation_messages(conversation_id)
-        search_query = await self._condense_query(history, query)
-
         messages: List[ChatMessage] = [
             ChatMessage(role=MessageRole.SYSTEM, content=TUTOR_SYSTEM_PROMPT)
         ]
@@ -350,17 +332,6 @@ class ChatService:
                 )
             )
             messages.append(ChatMessage(role=MessageRole.SYSTEM, content=context))
-        elif not attachment_texts:
-            messages.append(
-                ChatMessage(
-                    role=MessageRole.SYSTEM,
-                    content=(
-                        "No relevant content was found in the knowledge base for this query. "
-                        "Politely tell the student that the topic is outside the scope of the uploaded "
-                        "course materials and that you cannot answer it. Do not answer from general knowledge."
-                    ),
-                )
-            )
 
         messages.append(ChatMessage(role=MessageRole.USER, content=query))
         return messages
@@ -451,19 +422,6 @@ class ChatService:
         collection_name: str,
         limit: int = 5,
     ) -> str:
-        """
-        Embed the query with both dense and sparse encoders, run hybrid search (RRF),
-        and return the retrieved chunks joined as a single string.
-
-        Args:
-            query: The student's question to embed and search against.
-            collection_name: The Qdrant collection to search (maps to a specific material).
-            limit: Maximum number of chunks to return after RRF fusion.
-
-        Returns:
-            A single string of relevant chunk texts separated by '---', or an empty string
-            if no chunks are found.
-        """
         query_vector, sparse_query = await asyncio.gather(
             self.embedding_client.embed_text(query),
             self.sparse_encoder.encode_query(query),
