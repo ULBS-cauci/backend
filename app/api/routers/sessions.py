@@ -84,7 +84,7 @@ async def upload_attachment(
     db: AsyncSession = Depends(get_db_session),
 ):
     filename = file.filename or "unnamed"
-    suffix = Path(filename).suffix.lstrip(".").lower()
+    suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if suffix not in _ATTACHMENT_MIME_TYPES:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -112,19 +112,24 @@ async def upload_attachment(
     attachment_id = uuid.uuid4()
     object_key = build_attachment_object_key(current_user.id, attachment_id, filename)
 
-    attachment = Attachment(
-        id=attachment_id,
-        user_id=current_user.id,
-        file_name=filename,
-        object_storage_key=object_key,
-    )
-    db.add(attachment)
-    await db.commit()
-    await db.refresh(attachment)
-
     await object_storage.upload_file(
         MINIO_ATTACHMENTS_BUCKET, object_key, content, _ATTACHMENT_MIME_TYPES[suffix]
     )
+
+    try:
+        attachment = Attachment(
+            id=attachment_id,
+            user_id=current_user.id,
+            file_name=filename,
+            object_storage_key=object_key,
+        )
+        db.add(attachment)
+        await db.commit()
+        await db.refresh(attachment)
+    except Exception:
+        await object_storage.delete_file(MINIO_ATTACHMENTS_BUCKET, object_key)
+        raise
+
     return AttachmentPublic.model_validate(attachment)
 
 

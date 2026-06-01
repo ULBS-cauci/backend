@@ -150,6 +150,11 @@ class ChatService:
         attachment_ids: Optional[List[uuid.UUID]] = None,
     ) -> AsyncIterator[StreamEvent]:
         attachment_ids = attachment_ids or []
+        if not query.strip() and not attachment_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Message content or attachment required",
+            )
         conversation_id = await self._get_or_create_conversation(
             user_id, conversation_id, query
         )
@@ -164,15 +169,17 @@ class ChatService:
                 f"{sum(len(t) for _, t in attachment_texts)}"
             )
 
-        yield StatusEvent(message="Thinking about your question...")
-        search_query = await self._condense_query(history, query)
-        yield StatusEvent(message="Searching the knowledge base...")
-        context = await self._retrieve_relevant_chunks(
-            search_query, collection_name=QDRANT_MATERIALS_COLLECTION
-        )
+        context = ""
+        if query.strip():
+            yield StatusEvent(message="Thinking about your question...")
+            search_query = await self._condense_query(history, query)
+            yield StatusEvent(message="Searching the knowledge base...")
+            context = await self._retrieve_relevant_chunks(
+                search_query, collection_name=QDRANT_MATERIALS_COLLECTION
+            )
 
         user_message = await self._persist_message(
-            conversation_id, MessageSender.USER, query, flush_only=bool(attachment_ids)
+            conversation_id, MessageSender.USER, query
         )
         if attachment_ids:
             await self._link_attachments_to_message(
@@ -220,9 +227,6 @@ class ChatService:
                 detail="No user message found to regenerate from",
             )
 
-        await self.db_session.delete(last_ai_msg)
-        await self.db_session.commit()
-
         last_user_idx = next(i for i, m in enumerate(all_messages) if m.id == last_user_msg.id)
         context_history = all_messages[:last_user_idx]
         query = last_user_msg.content
@@ -245,6 +249,12 @@ class ChatService:
 
         if not context and not attachment_texts:
             yield ChunkEvent(content=_NO_CONTEXT_FALLBACK)
+            conversation = await self.db_session.get(Conversation, conversation_id)
+            conversation.updated_at = datetime.datetime.now(
+                datetime.timezone.utc
+            ).replace(tzinfo=None)
+            self.db_session.add(conversation)
+            await self.db_session.delete(last_ai_msg)
             await self._persist_message(conversation_id, MessageSender.AI, _NO_CONTEXT_FALLBACK)
             return
 
@@ -252,17 +262,18 @@ class ChatService:
             context_history, context, query, attachment_texts, regenerate=True
         )
 
-        conversation = await self.db_session.get(Conversation, conversation_id)
-        conversation.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
-        self.db_session.add(conversation)
-        await self.db_session.flush()
-
         yield StatusEvent(message="Generating answer...")
         chunks: list[str] = []
         async for chunk in self.llm_client.stream(llm_messages):
             chunks.append(chunk)
             yield ChunkEvent(content=chunk)
 
+        conversation = await self.db_session.get(Conversation, conversation_id)
+        conversation.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(
+            tzinfo=None
+        )
+        self.db_session.add(conversation)
+        await self.db_session.delete(last_ai_msg)
         await self._persist_message(conversation_id, MessageSender.AI, "".join(chunks))
 
     async def _get_or_create_conversation(
@@ -302,6 +313,17 @@ class ChatService:
 
     _IMAGE_EXTENSIONS: frozenset[str] = frozenset({"jpg", "jpeg", "png"})
 
+    @staticmethod
+    def _sanitize_prompt_attr(s: str) -> str:
+        """Escape a string for safe embedding inside an XML attribute in the prompt."""
+        s = s.replace("\r", "").replace("\n", "")
+        return (
+            s.replace("&", "&amp;")
+            .replace('"', "&quot;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+
     def _build_context_messages(
         self,
         history: List[Message],
@@ -330,8 +352,9 @@ class ChatService:
                     if suffix in self._IMAGE_EXTENSIONS
                     else ""
                 )
+                safe_filename = self._sanitize_prompt_attr(filename)
                 parts.append(
-                    f'<attached_document index="{i + 1}" filename="{filename}"{type_hint}>\n'
+                    f'<attached_document index="{i + 1}" filename="{safe_filename}"{type_hint}>\n'
                     f"{text}\n"
                     f"</attached_document>"
                 )
@@ -357,6 +380,17 @@ class ChatService:
                 )
             )
             messages.append(ChatMessage(role=MessageRole.SYSTEM, content=context))
+        else:
+            messages.append(
+                ChatMessage(
+                    role=MessageRole.SYSTEM,
+                    content=(
+                        "No relevant content was found in the university course knowledge base for this query. "
+                        "If the student's question can be answered from the attached files above, do so. "
+                        "Otherwise, politely inform them that the topic is outside the scope of the uploaded course materials."
+                    ),
+                )
+            )
 
         if regenerate:
             messages.append(
