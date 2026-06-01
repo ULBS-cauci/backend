@@ -3,9 +3,11 @@ from datetime import datetime, timezone
 import uuid
 from enum import Enum
 from sqlmodel import SQLModel, Field
+from sqlalchemy import Column, JSON
 from pydantic import BaseModel
 
 from app.schemas.time_schema import TimeSchema, TimestampSchema
+from app.schemas.source_schemas import SourceReference, SourcesEvent
 
 class MessageSender(str, Enum): 
     USER = "User"
@@ -68,6 +70,7 @@ class MessageBase(SQLModel):
 class Message(MessageBase, TimestampSchema, table=True):
     __tablename__ = "messages"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    sources: Optional[list] = Field(default=None, sa_column=Column(JSON, nullable=True))
 
 class MessageCreate(SQLModel):
     conversation_id: Optional[uuid.UUID] = None
@@ -100,6 +103,7 @@ class MessagePublic(MessageBase):
     id: uuid.UUID
     created_at: datetime
     attachments: List[AttachmentPublic] = Field(default_factory=list)
+    sources: Optional[List[SourceReference]] = None
 
 # ==========================================
 # SHARED LINK
@@ -133,6 +137,6 @@ class ErrorEvent(BaseModel):
     message: str
 
 
-StreamEvent = Annotated[Union[StatusEvent, ChunkEvent, ErrorEvent], Field(discriminator="type")]
+StreamEvent = Annotated[Union[StatusEvent, ChunkEvent, ErrorEvent, SourcesEvent], Field(discriminator="type")]
 
 

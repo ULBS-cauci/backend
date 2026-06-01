@@ -66,7 +66,8 @@ erDiagram
         UUID conversation_id FK "Ref: conversations.id"
         enum sender "User, System, AI"
         text content
-        UUID output_format_id FK "Ref: output_formats.id"
+        UUID output_format_id FK "Ref: output_formats.id (nullable)"
+        json sources "nullable - array of SourceReference"
         datetime created_at
     }
 
@@ -125,6 +126,29 @@ erDiagram
 
     %% Tips
     tip_categories ||--o{ llm_tips : "categorises"
+```
+
+## JSON Column: `messages.sources`
+
+The `sources` column stores the RAG retrieval sources used to generate each AI response. It is `NULL` for user and system messages, and populated for AI messages that had matching materials in Qdrant.
+
+Schema of each element in the JSON array:
+
+| Field | Type | Description |
+|---|---|---|
+| `material_id` | UUID string | FK to `materials.id` |
+| `file_name` | string | Display name of the source file |
+| `download_url` | string | Relative API path — `/api/v1/courses/{course_id}/materials/{material_id}/download` |
+
+Example value:
+```json
+[
+  {
+    "material_id": "9d123bca-...",
+    "file_name": "lecture1.pdf",
+    "download_url": "/api/v1/courses/c382901a-.../materials/9d123bca-.../download"
+  }
+]
 ```
 
 ## Class Diagram
@@ -192,6 +216,7 @@ classDiagram
         +MessageSender sender
         +Text content
         +UUID output_format_id
+        +JSON sources
         +DateTime created_at
     }
 
@@ -229,7 +254,7 @@ classDiagram
         +DateTime created_at
     }
 
-    %% Relationships as Class Dependencies / Composition
+    %% Relationships
     User "1" --> "*" Course : creates
     User "1" --> "*" SystemPrompt : authors
     User "1" --> "*" Material : uploads
@@ -292,13 +317,13 @@ classDiagram
         course_id: c382901a...
     }
 
-    class current_message {
+    class ai_response {
         <<Message>>
         id: 28bc9910...
         conversation_id: 11eeb229...
-        sender: "User"
-        content: "Can you explain backpropagation?"
-        output_format_id: null
+        sender: "AI"
+        content: "Backpropagation is..."
+        sources: "[{material_id: 9d123bca...}]"
     }
 
     class user_attachment {
@@ -309,19 +334,6 @@ classDiagram
         file_name: "my_notes.docx"
     }
 
-    class markdown_format {
-        <<OutputFormat>>
-        id: a1b2c3d4...
-        name: "markdown"
-        description: "Render response as Markdown"
-    }
-
-    class general_tips {
-        <<TipCategory>>
-        id: f9e8d7c6...
-        name: "General"
-    }
-
     %% Object Links
     professor_john ..> ai_course : creates
     professor_john ..> lecture_slides : uploads
@@ -330,7 +342,6 @@ classDiagram
     student_jane ..> jane_conversation : participates
     jane_conversation ..> ai_course : context
 
-    jane_conversation *-- current_message : owns
-    current_message *-- user_attachment : contains
-    current_message ..> markdown_format : requests
+    jane_conversation *-- ai_response : owns
+    ai_response *-- user_attachment : contains
 ```

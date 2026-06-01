@@ -24,6 +24,8 @@ from app.schemas.chat_schemas import (
     StatusEvent,
     StreamEvent,
 )
+from app.schemas.knowledge_schemas import Material
+from app.schemas.source_schemas import SourceReference, SourcesEvent
 from app.schemas.llm_schemas import ChatMessage, MessageRole
 from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.data_access.interfaces.embedding import EmbeddingInterface
@@ -159,7 +161,7 @@ class ChatService:
         yield StatusEvent(message="Thinking about your question...")
         search_query = await self._condense_query(history, query)
         yield StatusEvent(message="Searching the knowledge base...")
-        context = await self._retrieve_relevant_chunks(
+        context, sources = await self._retrieve_relevant_chunks(
             search_query, collection_name=QDRANT_MATERIALS_COLLECTION
         )
 
@@ -180,7 +182,10 @@ class ChatService:
             chunks.append(chunk)
             yield ChunkEvent(content=chunk)
 
-        await self._persist_message(conversation_id, MessageSender.AI, "".join(chunks))
+        await self._persist_message(conversation_id, MessageSender.AI, "".join(chunks), sources=sources or None)
+
+        if sources:
+            yield SourcesEvent(sources=sources)
 
     async def _get_or_create_conversation(
         self,
@@ -282,9 +287,14 @@ class ChatService:
         content: str,
         *,
         flush_only: bool = False,
+        sources: Optional[List[SourceReference]] = None,
     ) -> Message:
+        serialized_sources = [s.model_dump(mode="json") for s in sources] if sources else None
         message = Message(
-            conversation_id=conversation_id, sender=sender, content=content
+            conversation_id=conversation_id,
+            sender=sender,
+            content=content,
+            sources=serialized_sources,
         )
         self.db_session.add(message)
         if flush_only:
@@ -360,20 +370,8 @@ class ChatService:
         query: str,
         collection_name: str,
         limit: int = 5,
-    ) -> str:
-        """
-        Embed the query with both dense and sparse encoders, run hybrid search (RRF),
-        and return the retrieved chunks joined as a single string.
-
-        Args:
-            query: The student's question to embed and search against.
-            collection_name: The Qdrant collection to search (maps to a specific material).
-            limit: Maximum number of chunks to return after RRF fusion.
-
-        Returns:
-            A single string of relevant chunk texts separated by '---', or an empty string
-            if no chunks are found.
-        """
+    ) -> tuple[str, list[SourceReference]]:
+        """Hybrid search + RRF + rerank. Returns context string and deduplicated sources."""
         query_vector, sparse_query = await asyncio.gather(
             self.embedding_client.embed_text(query),
             self.sparse_encoder.encode_query(query),
@@ -403,5 +401,28 @@ class ChatService:
             logger.info(
                 f"No chunks above threshold {self.score_threshold} for query '{query}'"
             )
-            return ""
-        return "\n---\n".join(res.chunk.text for res in above_threshold)
+            return "", []
+        context = "\n---\n".join(res.chunk.text for res in above_threshold)
+        sources = await self._resolve_sources(above_threshold)
+        return context, sources
+
+    async def _resolve_sources(self, results: list) -> list[SourceReference]:
+        """Look up Material records for each unique object_storage_key in the result set."""
+        unique_keys = list({
+            res.chunk.metadata["source"]
+            for res in results
+            if res.chunk.metadata.get("source")
+        })
+        if not unique_keys:
+            return []
+        stmt = select(Material).where(Material.object_storage_key.in_(unique_keys))
+        db_result = await self.db_session.exec(stmt)
+        materials = db_result.all()
+        return [
+            SourceReference(
+                material_id=mat.id,
+                file_name=mat.file_name,
+                download_url=f"/api/v1/courses/{mat.course_id}/materials/{mat.id}/download",
+            )
+            for mat in materials
+        ]
