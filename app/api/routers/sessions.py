@@ -83,8 +83,16 @@ async def upload_attachment(
     object_storage: ObjectStorageInterface = Depends(get_object_storage_client),
     db: AsyncSession = Depends(get_db_session),
 ):
-    filename = file.filename or "unnamed"
+    filename = file.filename or ""
     suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if not suffix:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Cannot determine file type — the file has no extension. "
+                f"Accepted: {', '.join(sorted(_ATTACHMENT_MIME_TYPES))}"
+            ),
+        )
     if suffix not in _ATTACHMENT_MIME_TYPES:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -93,6 +101,7 @@ async def upload_attachment(
                 f"Accepted: {', '.join(sorted(_ATTACHMENT_MIME_TYPES))}"
             ),
         )
+    filename = filename or f"attachment.{suffix}"
 
     # Read up to the size limit + 1 so we can detect oversize uploads without buffering more.
     content = await file.read(MAX_ATTACHMENT_UPLOAD_BYTES + 1)
@@ -203,6 +212,12 @@ async def ask(
     current_user: User = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ):
+    if not payload.content.strip() and not payload.attachment_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Message content or attachment required",
+        )
+
     if payload.conversation_id:
         conversation = await service.get_conversation_for_user(
             conversation_id=payload.conversation_id, user_id=current_user.id

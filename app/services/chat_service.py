@@ -150,11 +150,6 @@ class ChatService:
         attachment_ids: Optional[List[uuid.UUID]] = None,
     ) -> AsyncIterator[StreamEvent]:
         attachment_ids = attachment_ids or []
-        if not query.strip() and not attachment_ids:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Message content or attachment required",
-            )
         conversation_id = await self._get_or_create_conversation(
             user_id, conversation_id, query
         )
@@ -283,7 +278,8 @@ class ChatService:
         query: str,
     ) -> uuid.UUID:
         if not conversation_id:
-            title = query[:50] + "..." if len(query) > 50 else query
+            raw_title = query.strip()
+            title = ((raw_title[:50] + "...") if len(raw_title) > 50 else raw_title) or "New Conversation"
             conversation = Conversation(user_id=user_id, title=title)
             self.db_session.add(conversation)
             await self.db_session.flush()
