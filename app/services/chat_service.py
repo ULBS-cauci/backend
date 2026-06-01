@@ -8,7 +8,6 @@ import logging
 
 logger = logging.getLogger("uvicorn.error")
 
-from sqlmodel import select
 from app.rag_engine.fusion import rrf_fuse
 from app.rag_engine.query_rewrite import build_condensation_messages
 from app.data_access.interfaces.llm import LLMInterface
@@ -288,7 +287,7 @@ class ChatService:
         content: str,
         *,
         flush_only: bool = False,
-        sources: Optional[list] = None,
+        sources: Optional[List[SourceReference]] = None,
     ) -> Message:
         serialized_sources = [s.model_dump(mode="json") for s in sources] if sources else None
         message = Message(

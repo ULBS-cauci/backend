@@ -75,7 +75,7 @@ async def download_course_material(
     _current_user: User = Depends(get_current_user),
 ):
     """Download a course material file with Content-Disposition: attachment."""
-    data, file_name, content_type = await file_service.download_material(material_id)
+    data, file_name, content_type = await file_service.download_material(material_id, course_id)
     encoded = quote(file_name)
     headers = {
         "Content-Disposition": (

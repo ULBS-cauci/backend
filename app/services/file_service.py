@@ -302,12 +302,20 @@ class FileService:
                 await engine.dispose()
 
     async def download_material(
-        self, material_id: uuid.UUID
+        self, material_id: uuid.UUID, course_id: uuid.UUID
     ) -> tuple[bytes, str, str]:
         """Return (bytes, file_name, content_type) for a material. Raises 404 if missing."""
-        material = await self.db.get(Material, material_id)
+        result = await self.db.exec(
+            select(Material).where(
+                Material.id == material_id,
+                Material.course_id == course_id,
+            )
+        )
+        material = result.one_or_none()
         if material is None:
             raise HTTPException(status_code=404, detail="Material not found")
+        if not material.object_storage_key:
+            raise HTTPException(status_code=404, detail="Material file is not available")
         data = await self.object_storage.download_file(
             MINIO_MATERIALS_BUCKET, material.object_storage_key
         )
