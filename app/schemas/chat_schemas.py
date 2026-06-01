@@ -4,6 +4,7 @@ import uuid
 from enum import Enum
 from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, JSON
+from pydantic import BaseModel
 
 from app.schemas.time_schema import TimeSchema, TimestampSchema
 from app.schemas.source_schemas import SourceReference, SourcesEvent
