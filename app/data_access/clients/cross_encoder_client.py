@@ -1,10 +1,14 @@
 import asyncio
+import logging
+import time
 from typing import List
 
 from sentence_transformers import CrossEncoder
 
 from app.data_access.interfaces.reranker import RerankerInterface
 from app.schemas.vector_schemas import SearchResult
+
+logger = logging.getLogger("uvicorn.error")
 
 
 class CrossEncoderReranker(RerankerInterface):
@@ -27,7 +31,12 @@ class CrossEncoderReranker(RerankerInterface):
 
         def _run() -> List[SearchResult]:
             pairs = [(query, res.chunk.text) for res in results]
+            t0 = time.perf_counter()
             scores = self._model.predict(pairs)
+            elapsed = time.perf_counter() - t0
+            logger.debug(
+                f"Reranker: scored {len(pairs)} pairs in {elapsed * 1000:.1f} ms"
+            )
             ranked = sorted(zip(scores, results), key=lambda x: x[0], reverse=True)
             return [
                 SearchResult(chunk=res.chunk, score=float(score))

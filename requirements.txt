@@ -6,8 +6,9 @@ ollama
 openai
 sqlmodel
 asyncpg
-pypdf>=4.2.0
+docling
 langchain-text-splitters
 fastembed>=0.5.0
 sentence-transformers
 FlagEmbedding>=1.2.0
+torch
