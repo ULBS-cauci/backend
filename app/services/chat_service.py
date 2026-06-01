@@ -382,8 +382,15 @@ class ChatService:
                     role=MessageRole.SYSTEM,
                     content=(
                         "No relevant content was found in the university course knowledge base for this query. "
-                        "If the student's question can be answered from the attached files above, do so. "
-                        "Otherwise, politely inform them that the topic is outside the scope of the uploaded course materials."
+                        "You MUST NOT answer new, unrelated questions from your general knowledge. "
+                        "However, if the student is asking you to rephrase, simplify, shorten, expand, "
+                        "or present in a different style the concepts already discussed in this conversation "
+                        "(e.g. 'make it shorter', 'explain to a child', 'give an example', 'explain differently', "
+                        "'in other words', 'translate', 'elaborate'), you MUST fulfill that request using only "
+                        "the content already covered in this conversation — do not add new information. "
+                        "If the student's question can be answered from the attached files shown above, do so. "
+                        "For any genuinely new question outside the conversation and course materials, "
+                        "refuse and inform the student."
                     ),
                 )
             )
