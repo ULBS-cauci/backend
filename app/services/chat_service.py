@@ -250,12 +250,6 @@ class ChatService:
         messages: List[ChatMessage] = [
             ChatMessage(role=MessageRole.SYSTEM, content=TUTOR_SYSTEM_PROMPT)
         ]
-        if predefined_prompt:
-            messages.append(
-                ChatMessage(role=MessageRole.SYSTEM, content=predefined_prompt)
-            )
-        if custom_prompt:
-            messages.append(ChatMessage(role=MessageRole.SYSTEM, content=custom_prompt))
         for msg in history:
             role = (
                 MessageRole.USER
@@ -297,6 +291,25 @@ class ChatService:
                         "No relevant content was found in the knowledge base for this query. "
                         "Politely tell the student that the topic is outside the scope of the uploaded "
                         "course materials and that you cannot answer it. Do not answer from general knowledge."
+                    ),
+                )
+            )
+
+        # The user's selected + personal prompts go LAST — after the history and the
+        # retrieval guardrail — wrapped in an authoritative directive so they win over
+        # the wording/formatting of older messages (e.g. a previous style the model
+        # would otherwise imitate) and over the guardrail.
+        directives = [p for p in (predefined_prompt, custom_prompt) if p]
+        if directives:
+            messages.append(
+                ChatMessage(
+                    role=MessageRole.SYSTEM,
+                    content=(
+                        "Follow these instructions for your reply. They take priority "
+                        "over the language, wording and formatting of earlier messages "
+                        "in this conversation — do NOT imitate how previous answers were "
+                        "written; obey only these instructions for style:\n\n"
+                        + "\n\n".join(directives)
                     ),
                 )
             )
