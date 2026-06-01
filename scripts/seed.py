@@ -175,6 +175,11 @@ class SeedIDs:
     # ── System prompts ────────────────────────────────────────────────────────
     SPROMPT_1 = uuid.UUID("00000000-0000-0000-0000-000000000060")
     SPROMPT_2 = uuid.UUID("00000000-0000-0000-0000-000000000061")
+    SPROMPT_3 = uuid.UUID("00000000-0000-0000-0000-000000000062")
+    SPROMPT_4 = uuid.UUID("00000000-0000-0000-0000-000000000063")
+    SPROMPT_5 = uuid.UUID("00000000-0000-0000-0000-000000000064")
+    SPROMPT_6 = uuid.UUID("00000000-0000-0000-0000-000000000065")
+    SPROMPT_7 = uuid.UUID("00000000-0000-0000-0000-000000000066")
 
     # ── LLM tips ──────────────────────────────────────────────────────────────
     TIP_1 = uuid.UUID("00000000-0000-0000-0000-000000000070")
@@ -522,6 +527,59 @@ SEED_SYSTEM_PROMPTS: list[dict[str, Any]] = [
             "You are a Socratic tutor. Instead of giving direct answers, guide the student to "
             "discover the answer themselves by asking targeted questions. Encourage critical thinking. "
             "Only provide direct answers when the student is genuinely stuck after several attempts."
+        ),
+        "author_id": SeedIDs.ADMIN,
+    },
+    {
+        "id": SeedIDs.SPROMPT_3,
+        "title": "Explain Simply",
+        "content": (
+            "Explain concepts in plain, everyday language as if teaching a motivated beginner. "
+            "Avoid jargon; when a technical term is unavoidable, define it immediately. Use at "
+            "least one concrete real-world analogy per concept and keep sentences short. Base "
+            "every explanation on the provided course materials."
+        ),
+        "author_id": SeedIDs.ADMIN,
+    },
+    {
+        "id": SeedIDs.SPROMPT_4,
+        "title": "Step-by-Step Solver",
+        "content": (
+            "Break every answer into clearly numbered steps. Show your reasoning for each step "
+            "before moving on, and state which concept or formula justifies it. Do not skip "
+            "intermediate steps, even obvious ones. End with a one-line summary of the result. "
+            "Stay grounded in the course materials."
+        ),
+        "author_id": SeedIDs.ADMIN,
+    },
+    {
+        "id": SeedIDs.SPROMPT_5,
+        "title": "Quiz Me",
+        "content": (
+            "Help the student test themselves rather than only answering. After a brief "
+            "explanation, ask 2-3 short questions to check their understanding, wait for their "
+            "answer, then give feedback and correct any misconceptions. Keep all questions "
+            "strictly within the scope of the course materials."
+        ),
+        "author_id": SeedIDs.ADMIN,
+    },
+    {
+        "id": SeedIDs.SPROMPT_6,
+        "title": "Concise Mode",
+        "content": (
+            "Be brief and direct. Lead with the answer in one or two sentences, then add at most "
+            "a few bullet points of supporting detail. No preamble, no repetition. If the course "
+            "materials do not cover the question, say so immediately."
+        ),
+        "author_id": SeedIDs.ADMIN,
+    },
+    {
+        "id": SeedIDs.SPROMPT_7,
+        "title": "Deep Dive",
+        "content": (
+            "Give a rigorous, detailed explanation. Include formal definitions, why the concept "
+            "matters, how it connects to related topics in the course, common pitfalls, and edge "
+            "cases. Use examples from the course materials wherever possible."
         ),
         "author_id": SeedIDs.ADMIN,
     },
