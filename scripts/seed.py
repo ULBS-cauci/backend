@@ -65,7 +65,7 @@ from app.schemas.chat_schemas import (
 )
 from app.schemas.course_schemas import Course
 from app.schemas.knowledge_schemas import Material
-from app.schemas.user_schemas import User, UserRole
+from app.schemas.user_schemas import User, UserRole, UserSetting
 
 # ── logging setup ─────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -192,6 +192,7 @@ class SeedIDs:
 # ── reset: reverse FK order ───────────────────────────────────────────────────
 
 _TRUNCATE_ORDER: list[str] = [
+    "user_settings",    # references users + system_prompts; no children
     "attachments",
     "shared_links",
     "messages",
