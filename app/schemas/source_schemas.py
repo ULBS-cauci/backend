@@ -1,3 +1,4 @@
+from typing import List, Literal
 import uuid
 from pydantic import BaseModel
 
@@ -8,6 +9,6 @@ class SourceReference(BaseModel):
     download_url: str
 
 
-class SourcesEvent:
-    def __init__(self, sources: list[SourceReference]) -> None:
-        self.sources = sources
+class SourcesEvent(BaseModel):
+    type: Literal["sources"] = "sources"
+    sources: List[SourceReference]
