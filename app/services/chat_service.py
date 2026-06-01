@@ -149,7 +149,10 @@ class ChatService:
                     "You are a quiz grader. Given a question, a reference answer, and a student's answer, "
                     "decide if the student demonstrates correct understanding. The student's phrasing does NOT "
                     "need to match exactly — evaluate conceptual correctness. "
-                    'Respond with ONLY a JSON object: {"correct": true or false, "feedback": "one sentence"}'
+                    "When you provide feedback, be concise and focus on the most important point the student missed, if any. "
+                    "Any deviations from the correct answer should be noted in the feedback, regardless of whether the overall understanding is correct or not. "
+                    "The feedback must be addressed to the student (e.g. 'You missed...', 'Your answer is correct but...', etc.) and be in the same language as the question. "
+                    'Respond with ONLY a JSON object: {"correct": true or false, "feedback": "two sentences of feedback here"}'
                 ),
             ),
             ChatMessage(
