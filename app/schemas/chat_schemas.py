@@ -71,7 +71,7 @@ class Message(MessageBase, TimestampSchema, table=True):
 
 class MessageCreate(SQLModel):
     conversation_id: Optional[uuid.UUID] = None
-    content: str = Field(..., min_length=5, description="The content of the message.")
+    content: str = Field(default="", description="The content of the message.")
     output_format_id: Optional[uuid.UUID] = Field(
         default=None,
         description="Optional FK to output_formats — specifies the desired response format.",

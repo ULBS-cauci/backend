@@ -1,6 +1,7 @@
 import io
 import json
 import uuid
+from pathlib import Path
 from typing import List
 from urllib.parse import quote
 
@@ -30,6 +31,15 @@ from app.services.chat_service import ChatService
 router = APIRouter()
 
 MAX_ATTACHMENT_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+
+_ATTACHMENT_MIME_TYPES: dict[str, str] = {
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+}
 
 
 @router.get("/", response_model=List[ConversationPublic])
@@ -73,11 +83,15 @@ async def upload_attachment(
     object_storage: ObjectStorageInterface = Depends(get_object_storage_client),
     db: AsyncSession = Depends(get_db_session),
 ):
-    filename = file.filename or "unnamed.pdf"
-    if not filename.lower().endswith(".pdf"):
+    filename = file.filename or "unnamed"
+    suffix = Path(filename).suffix.lstrip(".").lower()
+    if suffix not in _ATTACHMENT_MIME_TYPES:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Only PDF files are accepted for chat attachments.",
+            detail=(
+                f"Unsupported file type '.{suffix}'. "
+                f"Accepted: {', '.join(sorted(_ATTACHMENT_MIME_TYPES))}"
+            ),
         )
 
     # Read up to the size limit + 1 so we can detect oversize uploads without buffering more.
@@ -109,7 +123,7 @@ async def upload_attachment(
     await db.refresh(attachment)
 
     await object_storage.upload_file(
-        MINIO_ATTACHMENTS_BUCKET, object_key, content, "application/pdf"
+        MINIO_ATTACHMENTS_BUCKET, object_key, content, _ATTACHMENT_MIME_TYPES[suffix]
     )
     return AttachmentPublic.model_validate(attachment)
 
@@ -146,9 +160,9 @@ async def download_attachment(
     headers = {
         "Content-Disposition": f'inline; filename="{encoded_name}"; filename*=UTF-8\'\'{encoded_name}'
     }
-    return StreamingResponse(
-        io.BytesIO(data), media_type="application/pdf", headers=headers
-    )
+    suffix = Path(attachment.file_name).suffix.lstrip(".").lower()
+    media_type = _ATTACHMENT_MIME_TYPES.get(suffix, "application/octet-stream")
+    return StreamingResponse(io.BytesIO(data), media_type=media_type, headers=headers)
 
 
 @router.post("/{conversation_id}/regenerate")
@@ -164,10 +178,15 @@ async def regenerate(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
     async def event_stream():
-        async for chunk in service.regenerate_stream(
-            conversation_id=conversation_id,
-        ):
-            yield f"data: {json.dumps(chunk)}\n\n"
+        try:
+            async for chunk in service.regenerate_stream(
+                conversation_id=conversation_id, user_id=current_user.id
+            ):
+                yield f"data: {chunk.model_dump_json()}\n\n"
+        except HTTPException as exc:
+            yield f"data: {json.dumps({'type': 'error', 'message': exc.detail})}\n\n"
+        except Exception:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'An unexpected error occurred.'})}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
