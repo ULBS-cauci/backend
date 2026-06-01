@@ -47,6 +47,11 @@ class SystemPromptPublic(SystemPromptBase):
     created_at: datetime
 
 
+class SystemPromptSummary(SQLModel):
+    id: uuid.UUID
+    title: Optional[str] = None
+
+
 # ==========================================
 # LLM TIPS
 # ==========================================
