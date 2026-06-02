@@ -51,6 +51,7 @@ class VectorDBInterface(ABC):
         collection_name: str,
         query_vector: List[float],
         limit: int = 5,
+        course_id_filter: Optional[str] = None,
     ) -> List[SearchResult]:
         """
         Performs a dense (semantic) vector search.
@@ -59,6 +60,8 @@ class VectorDBInterface(ABC):
             collection_name (str): The name of the collection to search against.
             query_vector (List[float]): Dense embedding of the user's query.
             limit (int): Maximum number of results to return. Defaults to 5.
+            course_id_filter (str, optional): When set, restricts results to chunks whose
+                metadata.course_id matches this value.
 
         Returns:
             List[SearchResult]: Results sorted from highest to lowest cosine similarity.
@@ -71,6 +74,7 @@ class VectorDBInterface(ABC):
         collection_name: str,
         sparse_query: SparseVectorSchema,
         limit: int = 5,
+        course_id_filter: Optional[str] = None,
     ) -> List[SearchResult]:
         """
         Performs a sparse (BM25 keyword) vector search.
@@ -79,6 +83,8 @@ class VectorDBInterface(ABC):
             collection_name (str): The name of the collection to search against.
             sparse_query (SparseVectorSchema): BM25 sparse vector for the query.
             limit (int): Maximum number of results to return. Defaults to 5.
+            course_id_filter (str, optional): When set, restricts results to chunks whose
+                metadata.course_id matches this value.
 
         Returns:
             List[SearchResult]: A list of domain models containing the chunk data and its relevance 

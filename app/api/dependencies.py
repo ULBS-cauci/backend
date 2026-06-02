@@ -22,6 +22,7 @@ from app.core.config import (
     BM25Settings,
     BGEM3Settings,
     ChunkingSettings,
+    ContextRoutingSettings,
     ExecutorSettings,
 )
 
@@ -333,6 +334,12 @@ def get_cross_encoder_settings() -> CrossEncoderSettings:
 
 
 @lru_cache()
+def get_context_routing_settings() -> ContextRoutingSettings:
+    """Reads and caches ContextRoutingSettings once per application lifecycle."""
+    return ContextRoutingSettings()  
+
+
+@lru_cache()
 def _get_cross_encoder_reranker() -> CrossEncoderReranker:
     """Instantiates and caches the cross-encoder reranker. Downloads model on first call."""
     settings = get_cross_encoder_settings()
@@ -354,6 +361,7 @@ def get_chat_service(
     reranker: RerankerInterface = Depends(get_reranker),
     db_session: AsyncSession = Depends(get_db_session),
     cross_encoder_settings: CrossEncoderSettings = Depends(get_cross_encoder_settings),
+    routing_settings: ContextRoutingSettings = Depends(get_context_routing_settings),
     object_storage: ObjectStorageInterface = Depends(get_object_storage_client),
 ) -> ChatService:
     return ChatService(
@@ -366,6 +374,9 @@ def get_chat_service(
         db_session=db_session,
         object_storage=object_storage,
         document_converter=_get_docling_converter(),
+        context_routing_enabled=routing_settings.CONTEXT_ROUTING_ENABLED,
+        context_routing_top_k=routing_settings.CONTEXT_ROUTING_TOP_K,
+        context_routing_delta=routing_settings.CONTEXT_ROUTING_DELTA,
     )
 
 

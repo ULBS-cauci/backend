@@ -256,7 +256,7 @@ class FileService:
                 if not text_chunks:
                     raise ValueError("Text splitting produced no chunks.")
 
-                domain_chunks = create_document_chunks(text_chunks, object_storage_key)
+                domain_chunks = create_document_chunks(text_chunks, object_storage_key, course_id=str(material.course_id))
 
                 dense_vectors = await embed_client.embed_batch(text_chunks)
                 if not dense_vectors:

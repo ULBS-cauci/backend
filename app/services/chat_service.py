@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from dataclasses import dataclass
 from typing import AsyncIterator, List, Optional
 from sqlmodel import select, desc, asc, update
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -16,6 +17,7 @@ from app.schemas.chat_schemas import (
     Attachment,
     AttachmentPublic,
     ChunkEvent,
+    ContextSwitchRequestEvent,
     Conversation,
     ErrorEvent,
     Message,
@@ -24,9 +26,11 @@ from app.schemas.chat_schemas import (
     StatusEvent,
     StreamEvent,
 )
+from app.schemas.course_schemas import Course
 from app.schemas.knowledge_schemas import Material
 from app.schemas.source_schemas import SourceReference, SourcesEvent
 from app.schemas.llm_schemas import ChatMessage, MessageRole
+from app.schemas.vector_schemas import SearchResult
 from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
@@ -48,6 +52,12 @@ MAX_ATTACHMENT_CHARS = 10_000
 MAX_TOTAL_ATTACHMENT_CHARS = 30_000
 
 
+@dataclass
+class CourseInfo:
+    id: uuid.UUID
+    title: str
+
+
 class ChatService:
     def __init__(
         self,
@@ -60,6 +70,9 @@ class ChatService:
         db_session: AsyncSession,
         object_storage: ObjectStorageInterface,
         document_converter: DocumentConverter,
+        context_routing_enabled: bool = True,
+        context_routing_top_k: int = 20,
+        context_routing_delta: float = 0.10,
     ):
         self.vector_db = vector_db
         self.embedding_client = embedding_client
@@ -70,14 +83,20 @@ class ChatService:
         self.db_session = db_session
         self.object_storage = object_storage
         self._document_converter = document_converter
+        self.context_routing_enabled = context_routing_enabled
+        self.context_routing_top_k = context_routing_top_k
+        self.context_routing_delta = context_routing_delta
 
-    async def create_conversation(self, user_id: uuid.UUID) -> Conversation:
+    async def create_conversation(
+        self, user_id: uuid.UUID, course_id: Optional[uuid.UUID] = None
+    ) -> Conversation:
         conversation = Conversation(
             user_id=user_id,
             title="New Conversation_" + datetime.datetime.now().isoformat(),
+            course_id=course_id,
         )
         self.db_session.add(conversation)
-        await self.db_session.flush()
+        await self.db_session.commit()
         await self.db_session.refresh(conversation)
         return conversation
 
@@ -141,40 +160,69 @@ class ChatService:
         user_id: uuid.UUID,
         conversation_id: Optional[uuid.UUID] = None,
         attachment_ids: Optional[List[uuid.UUID]] = None,
+        force_current_course: bool = False,
+        existing_message_id: Optional[uuid.UUID] = None,
     ) -> AsyncIterator[StreamEvent]:
         attachment_ids = attachment_ids or []
-        conversation_id = await self._get_or_create_conversation(
-            user_id, conversation_id, query
-        )
-        history = await self.get_conversation_messages(conversation_id)
+        conversation = await self._get_or_create_conversation(user_id, conversation_id, query)
+        history = await self.get_conversation_messages(conversation.id)
 
         attachment_texts: List[str] = []
         if attachment_ids:
             yield StatusEvent(message="Reading your attachments...")
-            attachment_texts = await self._fetch_attachment_texts(
-                attachment_ids, user_id
-            )
+            attachment_texts = await self._fetch_attachment_texts(attachment_ids, user_id)
             logger.info(
                 f"Fetched {len(attachment_texts)} attachment(s), total chars: {sum(len(t) for t in attachment_texts)}"
             )
 
         yield StatusEvent(message="Thinking about your question...")
         search_query = await self._condense_query(history, query)
+        
+        if existing_message_id is None:
+            user_message = await self._persist_message(
+                conversation.id, MessageSender.USER, query, flush_only=bool(attachment_ids)
+            )
+            if attachment_ids:
+                await self._link_attachments_to_message(user_message.id, attachment_ids, user_id)
+        else:
+            user_message = await self.db_session.get(Message, existing_message_id)
+            if user_message is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Referenced message not found",
+                )
+
         yield StatusEvent(message="Searching the knowledge base...")
+
+        if force_current_course:
+            refusal = "The currently selected course does not contain information regarding this topic. Please switch to the relevant course to get an answer, or ask a question related to the current course."
+            await self._persist_message(conversation.id, MessageSender.AI, refusal)
+            yield ChunkEvent(content=refusal)
+            return
+
+        fused_chunks: Optional[List[SearchResult]] = None
+
+        if conversation.course_id and not force_current_course and self.context_routing_enabled:
+            mismatch_course, fused_chunks = await self._detect_course_mismatch(
+                search_query, str(conversation.course_id)
+            )
+            if mismatch_course is not None:
+                yield ContextSwitchRequestEvent(
+                    detected_course_id=str(mismatch_course.id),
+                    detected_course_name=mismatch_course.title,
+                    user_message_id=str(user_message.id),
+                )
+                return
+
+        course_id_scope = str(conversation.course_id) if conversation.course_id else None
         context, sources = await self._retrieve_relevant_chunks(
-            search_query, collection_name=QDRANT_MATERIALS_COLLECTION
+            search_query,
+            collection_name=QDRANT_MATERIALS_COLLECTION,
+            course_id=course_id_scope,
+            prefetched_fused=fused_chunks,
         )
 
-        messages = self._build_context_messages(
-            history, context, query, attachment_texts
-        )
-        user_message = await self._persist_message(
-            conversation_id, MessageSender.USER, query, flush_only=bool(attachment_ids)
-        )
-        if attachment_ids:
-            await self._link_attachments_to_message(
-                user_message.id, attachment_ids, user_id
-            )
+        messages = self._build_context_messages(history, context, query, attachment_texts)
 
         yield StatusEvent(message="Generating answer...")
         chunks = []
@@ -182,7 +230,7 @@ class ChatService:
             chunks.append(chunk)
             yield ChunkEvent(content=chunk)
 
-        await self._persist_message(conversation_id, MessageSender.AI, "".join(chunks), sources=sources or None)
+        await self._persist_message(conversation.id, MessageSender.AI, "".join(chunks), sources=sources or None)
 
         if sources:
             yield SourcesEvent(sources=sources)
@@ -192,14 +240,14 @@ class ChatService:
         user_id: uuid.UUID,
         conversation_id: Optional[uuid.UUID],
         query: str,
-    ) -> uuid.UUID:
+    ) -> Conversation:
         if not conversation_id:
             title = query[:50] + "..." if len(query) > 50 else query
             conversation = Conversation(user_id=user_id, title=title)
             self.db_session.add(conversation)
             await self.db_session.flush()
             await self.db_session.refresh(conversation)
-            return conversation.id
+            return conversation
 
         conversation = await self.get_conversation_for_user(conversation_id, user_id)
         if not conversation:
@@ -212,7 +260,7 @@ class ChatService:
         )
         self.db_session.add(conversation)
         await self.db_session.flush()
-        return conversation_id
+        return conversation
 
     async def _condense_query(self, history: List[Message], query: str) -> str:
         if not history:
@@ -370,31 +418,54 @@ class ChatService:
         query: str,
         collection_name: str,
         limit: int = 5,
+        course_id: Optional[str] = None,
+        prefetched_fused: Optional[List[SearchResult]] = None,
     ) -> tuple[str, list[SourceReference]]:
-        """Hybrid search + RRF + rerank. Returns context string and deduplicated sources."""
-        query_vector, sparse_query = await asyncio.gather(
-            self.embedding_client.embed_text(query),
-            self.sparse_encoder.encode_query(query),
-        )
+        """Hybrid search + RRF + rerank. Returns context string and deduplicated sources.
 
-        semantic_results, keyword_results = await asyncio.gather(
-            self.vector_db.search(collection_name, query_vector, limit=limit * 4),
-            self.vector_db.search_sparse(
-                collection_name, sparse_query, limit=limit * 4
-            ),
-            return_exceptions=True,
-        )
+        If `prefetched_fused` is supplied (global probe results from _detect_course_mismatch),
+        the method filters them to `course_id` and skips the Qdrant round-trip.  Falls back
+        to a fresh scoped search if no current-course chunks survive the filter.
+        """
+        fused: List[SearchResult]
 
-        if isinstance(semantic_results, Exception):
-            raise semantic_results
-        if isinstance(keyword_results, Exception):
-            logger.warning(
-                f"Sparse search failed for '{collection_name}' — falling back to dense-only. "
-                f"Reindex with sparse=True to restore hybrid retrieval. Error: {keyword_results}"
+        if prefetched_fused is not None and course_id is not None:
+            course_chunks = [
+                r for r in prefetched_fused
+                if r.chunk.metadata.get("course_id") == course_id
+            ]
+            if course_chunks:
+                fused = course_chunks
+            else:
+                prefetched_fused = None
+
+        if prefetched_fused is None:
+            query_vector, sparse_query = await asyncio.gather(
+                self.embedding_client.embed_text(query),
+                self.sparse_encoder.encode_query(query),
             )
-            keyword_results = []
 
-        fused = rrf_fuse(semantic_results, keyword_results, limit=limit * 2)
+            semantic_results, keyword_results = await asyncio.gather(
+                self.vector_db.search(
+                    collection_name, query_vector, limit=limit * 4, course_id_filter=course_id
+                ),
+                self.vector_db.search_sparse(
+                    collection_name, sparse_query, limit=limit * 4, course_id_filter=course_id
+                ),
+                return_exceptions=True,
+            )
+
+            if isinstance(semantic_results, Exception):
+                raise semantic_results
+            if isinstance(keyword_results, Exception):
+                logger.warning(
+                    f"Sparse search failed for '{collection_name}' — falling back to dense-only. "
+                    f"Reindex with sparse=True to restore hybrid retrieval. Error: {keyword_results}"
+                )
+                keyword_results = []
+
+            fused = rrf_fuse(semantic_results, keyword_results, limit=limit * 2)
+
         reranked = await self.reranker.rerank(query, fused, top_n=limit)
         above_threshold = [res for res in reranked if res.score >= self.score_threshold]
         if not above_threshold:
@@ -405,6 +476,77 @@ class ChatService:
         context = "\n---\n".join(res.chunk.text for res in above_threshold)
         sources = await self._resolve_sources(above_threshold)
         return context, sources
+
+    async def _detect_course_mismatch(
+        self,
+        query: str,
+        current_course_id: str,
+    ) -> tuple[Optional[CourseInfo], List[SearchResult]]:
+        """Unfiltered hybrid probe to detect whether the query belongs to a different course.
+
+        Runs Dense + Sparse + RRF globally (no course filter), groups results by course_id,
+        and triggers a switch prompt when the dominant course differs from the current one
+        by more than context_routing_delta in aggregate RRF score.
+
+        Returns (CourseInfo, fused_chunks).  CourseInfo is non-None only when a mismatch is
+        detected.  fused_chunks is always returned so the caller can reuse it to skip a
+        second Qdrant round-trip on the happy path.
+        """
+        probe_limit = self.context_routing_top_k
+        query_vector, sparse_query = await asyncio.gather(
+            self.embedding_client.embed_text(query),
+            self.sparse_encoder.encode_query(query),
+        )
+
+        semantic_results, keyword_results = await asyncio.gather(
+            self.vector_db.search(QDRANT_MATERIALS_COLLECTION, query_vector, limit=probe_limit),
+            self.vector_db.search_sparse(QDRANT_MATERIALS_COLLECTION, sparse_query, limit=probe_limit),
+            return_exceptions=True,
+        )
+        if isinstance(semantic_results, Exception):
+            raise semantic_results
+        if isinstance(keyword_results, Exception):
+            keyword_results = []
+
+        fused = rrf_fuse(semantic_results, keyword_results, limit=probe_limit)
+
+        if not fused:
+            return None, []
+
+        course_scores: dict[str, float] = {}
+        course_counts: dict[str, int] = {}
+        for result in fused:
+            cid = result.chunk.metadata.get("course_id", "")
+            if cid:
+                course_scores[cid] = course_scores.get(cid, 0.0) + result.score
+                course_counts[cid] = course_counts.get(cid, 0) + 1
+
+        if not course_scores:
+            return None, fused
+
+        course_avg: dict[str, float] = {
+            cid: course_scores[cid] / course_counts[cid] for cid in course_scores
+        }
+
+        dominant_course_id = max(course_avg, key=lambda k: course_avg[k])
+        if dominant_course_id == current_course_id:
+            return None, fused
+
+        dominant_avg = course_avg[dominant_course_id]
+        current_avg = course_avg.get(current_course_id, 0.0)
+
+        if current_avg > 0.0 and dominant_avg < current_avg * (1.0 + self.context_routing_delta):
+            return None, fused
+
+        try:
+            course = await self.db_session.get(Course, uuid.UUID(dominant_course_id))
+            if course is None:
+                logger.warning("[routing] dominant course %s not found in DB", dominant_course_id)
+                return None, fused
+            return CourseInfo(id=course.id, title=course.title), fused
+        except Exception:
+            logger.warning("[routing] failed to fetch course %s", dominant_course_id, exc_info=True)
+            return None, fused
 
     async def _resolve_sources(self, results: list) -> list[SourceReference]:
         """Look up Material records for each unique object_storage_key in the result set."""

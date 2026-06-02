@@ -10,7 +10,7 @@ import os
 import tempfile
 import uuid
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from docling.document_converter import DocumentConverter
 
@@ -81,6 +81,7 @@ def extract_text_with_docling(
 def create_document_chunks(
     text_chunks: List[str],
     source: str,
+    course_id: Optional[str] = None,
 ) -> List[DocumentChunk]:
     """Map a list of text strings to DocumentChunk objects.
 
@@ -94,15 +95,20 @@ def create_document_chunks(
                      that rollback deletions are scoped to this exact upload and never
                      accidentally remove chunks from a different material with the same
                      filename.
+        course_id:   Optional string UUID of the owning course. Stored in chunk metadata
+                     so that Qdrant payload filters can scope retrieval to a single course.
 
     Returns:
         List of DocumentChunk objects ready for embedding and upsert.
     """
+    metadata: dict = {"source": source}
+    if course_id:
+        metadata["course_id"] = course_id
     chunks = [
         DocumentChunk(
             id=uuid.uuid4(),
             text=chunk,
-            metadata={"source": source},
+            metadata=metadata,
         )
         for chunk in text_chunks
     ]

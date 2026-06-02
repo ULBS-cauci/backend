@@ -80,6 +80,8 @@ class MessageCreate(SQLModel):
         description="Optional FK to output_formats — specifies the desired response format.",
     )
     attachment_ids: List[uuid.UUID] = Field(default_factory=list)
+    force_current_course: bool = Field(default=False, description="Skip cross-course routing check for this message.")
+    existing_message_id: Optional[uuid.UUID] = Field(default=None, description="Re-use an already-persisted user message (idempotency guard for context-switch re-submissions).")
 
 # ==========================================
 # ATTACHMENT
@@ -137,6 +139,16 @@ class ErrorEvent(BaseModel):
     message: str
 
 
-StreamEvent = Annotated[Union[StatusEvent, ChunkEvent, ErrorEvent, SourcesEvent], Field(discriminator="type")]
+class ContextSwitchRequestEvent(BaseModel):
+    type: Literal["context_switch_request"] = "context_switch_request"
+    detected_course_id: str
+    detected_course_name: str
+    user_message_id: str
+
+
+StreamEvent = Annotated[
+    Union[StatusEvent, ChunkEvent, ErrorEvent, SourcesEvent, ContextSwitchRequestEvent],
+    Field(discriminator="type"),
+]
 
 

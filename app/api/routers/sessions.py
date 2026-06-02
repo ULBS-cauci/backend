@@ -1,8 +1,10 @@
 import io
 import json
 import uuid
-from typing import List
+from typing import List, Optional
 from urllib.parse import quote
+
+from sqlmodel import SQLModel
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -40,12 +42,17 @@ async def list_conversations(
     return await service.get_user_conversations(user_id=current_user.id)
 
 
+class ConversationCreate(SQLModel):
+    course_id: Optional[uuid.UUID] = None
+
+
 @router.post("/", response_model=ConversationPublic)
 async def create_conversation(
+    body: ConversationCreate = ConversationCreate(),
     current_user: User = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ):
-    return await service.create_conversation(user_id=current_user.id)
+    return await service.create_conversation(user_id=current_user.id, course_id=body.course_id)
 
 
 @router.get("/{conversation_id}/messages", response_model=List[MessagePublic])
@@ -174,6 +181,8 @@ async def ask(
                 user_id=current_user.id,
                 conversation_id=payload.conversation_id,
                 attachment_ids=payload.attachment_ids,
+                force_current_course=payload.force_current_course,
+                existing_message_id=payload.existing_message_id,
             ):
                 yield f"data: {event.model_dump_json()}\n\n"
         except HTTPException as exc:
