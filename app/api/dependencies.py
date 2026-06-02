@@ -1,3 +1,4 @@
+import platform
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from fastapi import Depends, HTTPException, Request, status
@@ -43,9 +44,22 @@ from typing import AsyncGenerator
 from app.services.file_service import FileService
 
 from app.data_access.interfaces.text_splitter import TextSplitterInterface
-from app.data_access.clients.langchain_splitter_client import LangChainRecursiveSplitterClient
+from app.data_access.clients.langchain_splitter_client import (
+    LangChainRecursiveSplitterClient,
+)
 from app.data_access.clients.markdown_splitter_client import MarkdownSplitterClient
-from docling.document_converter import DocumentConverter
+from docling.datamodel.base_models import InputFormat
+from docling.datamodel.pipeline_options import (
+    AcceleratorDevice,
+    AcceleratorOptions,
+    PdfPipelineOptions,
+)
+from docling.document_converter import (
+    DocumentConverter,
+    ImageFormatOption,
+    PdfFormatOption,
+)
+
 
 @lru_cache()
 def get_app_settings() -> AppSettings:
@@ -161,7 +175,23 @@ def _get_docling_converter() -> DocumentConverter:
 
     DocumentConverter loads OCR + layout models on first call.
     It is stateless and thread-safe for concurrent convert() calls on distinct file paths.
+
+    On Apple Silicon, Docling's default AUTO accelerator selects the MPS backend,
+    which does not support float64 and crashes during PDF/image conversion. We force
+    CPU there; every other platform (Linux/Windows, CPU/CUDA) keeps Docling's default
+    behaviour. DOCX/PPTX are unaffected — they do not run torch models.
     """
+    if platform.system() == "Darwin" and platform.machine() == "arm64":
+        pipeline_options = PdfPipelineOptions()
+        pipeline_options.accelerator_options = AcceleratorOptions(
+            device=AcceleratorDevice.CPU
+        )
+        return DocumentConverter(
+            format_options={
+                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options),
+                InputFormat.IMAGE: ImageFormatOption(pipeline_options=pipeline_options),
+            }
+        )
     return DocumentConverter()
 
 
@@ -190,7 +220,9 @@ def make_ingestion_object_storage() -> ObjectStorageInterface:
             secret_key=s.MINIO_PASSWORD,
             use_ssl=s.MINIO_USE_SSL,
         )
-    raise ValueError(f"Unsupported Object Storage type: {app.OBJECT_STORAGE_CLIENT_TYPE}")
+    raise ValueError(
+        f"Unsupported Object Storage type: {app.OBJECT_STORAGE_CLIENT_TYPE}"
+    )
 
 
 def make_ingestion_embedding() -> EmbeddingInterface:
@@ -198,7 +230,9 @@ def make_ingestion_embedding() -> EmbeddingInterface:
     app = get_app_settings()
     if app.EMBEDDING_CLIENT_TYPE == "ollama":
         s = OllamaSettings()  # type: ignore
-        return OllamaEmbeddingClient(host=s.OLLAMA_HOST, model_name=s.OLLAMA_EMBED_MODEL)
+        return OllamaEmbeddingClient(
+            host=s.OLLAMA_HOST, model_name=s.OLLAMA_EMBED_MODEL
+        )
     raise ValueError(f"Unsupported Embedding Client type: {app.EMBEDDING_CLIENT_TYPE}")
 
 
@@ -323,7 +357,9 @@ def get_sparse_encoder(
         return _get_bgem3_sparse_encoder()
     if app.SPARSE_ENCODER_CLIENT_TYPE == "bm25":
         return _get_bm25_sparse_encoder()
-    raise ValueError(f"Unsupported sparse encoder type: {app.SPARSE_ENCODER_CLIENT_TYPE}")
+    raise ValueError(
+        f"Unsupported sparse encoder type: {app.SPARSE_ENCODER_CLIENT_TYPE}"
+    )
 
 
 @lru_cache()
