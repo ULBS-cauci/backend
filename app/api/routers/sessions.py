@@ -182,7 +182,6 @@ async def ask(
                 conversation_id=payload.conversation_id,
                 attachment_ids=payload.attachment_ids,
                 force_current_course=payload.force_current_course,
-                existing_message_id=payload.existing_message_id,
             ):
                 yield f"data: {event.model_dump_json()}\n\n"
         except HTTPException as exc:

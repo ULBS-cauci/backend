@@ -161,7 +161,6 @@ class ChatService:
         conversation_id: Optional[uuid.UUID] = None,
         attachment_ids: Optional[List[uuid.UUID]] = None,
         force_current_course: bool = False,
-        existing_message_id: Optional[uuid.UUID] = None,
     ) -> AsyncIterator[StreamEvent]:
         attachment_ids = attachment_ids or []
         conversation = await self._get_or_create_conversation(user_id, conversation_id, query)
@@ -177,42 +176,40 @@ class ChatService:
 
         yield StatusEvent(message="Thinking about your question...")
         search_query = await self._condense_query(history, query)
-        
-        if existing_message_id is None:
-            user_message = await self._persist_message(
-                conversation.id, MessageSender.USER, query, flush_only=bool(attachment_ids)
-            )
-            if attachment_ids:
-                await self._link_attachments_to_message(user_message.id, attachment_ids, user_id)
-        else:
-            user_message = await self.db_session.get(Message, existing_message_id)
-            if user_message is None:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Referenced message not found",
-                )
 
         yield StatusEvent(message="Searching the knowledge base...")
 
-        if force_current_course:
-            refusal = "The currently selected course does not contain information regarding this topic. Please switch to the relevant course to get an answer, or ask a question related to the current course."
-            await self._persist_message(conversation.id, MessageSender.AI, refusal)
-            yield ChunkEvent(content=refusal)
-            return
-
         fused_chunks: Optional[List[SearchResult]] = None
-
-        if conversation.course_id and not force_current_course and self.context_routing_enabled:
+        if conversation.course_id and self.context_routing_enabled:
+            logger.info(
+                "[routing] probe: conv=%s course=%s query='%s'",
+                conversation.id, conversation.course_id, search_query[:80],
+            )
             mismatch_course, fused_chunks = await self._detect_course_mismatch(
                 search_query, str(conversation.course_id)
             )
-            if mismatch_course is not None:
+            if mismatch_course is not None and not force_current_course:
+                logger.info(
+                    "[routing] mismatch → detected course=%s '%s'",
+                    mismatch_course.id, mismatch_course.title,
+                )
                 yield ContextSwitchRequestEvent(
                     detected_course_id=str(mismatch_course.id),
                     detected_course_name=mismatch_course.title,
-                    user_message_id=str(user_message.id),
                 )
                 return
+
+        user_message = await self._persist_message(
+            conversation.id, MessageSender.USER, query, flush_only=bool(attachment_ids)
+        )
+        if attachment_ids:
+            await self._link_attachments_to_message(user_message.id, attachment_ids, user_id)
+
+        if force_current_course:
+            refusal = "The currently selected course does not contain information regarding this topic. Ask another question or remove the course filter to search across all courses."
+            await self._persist_message(conversation.id, MessageSender.AI, refusal)
+            yield ChunkEvent(content=refusal)
+            return
 
         course_id_scope = str(conversation.course_id) if conversation.course_id else None
         context, sources = await self._retrieve_relevant_chunks(
@@ -528,14 +525,30 @@ class ChatService:
             cid: course_scores[cid] / course_counts[cid] for cid in course_scores
         }
 
+        logger.info(
+            "[routing] fused=%d chunks, course_avg=%s, current_course=%s",
+            len(fused),
+            {k: f"{v:.5f}" for k, v in course_avg.items()},
+            current_course_id,
+        )
+
         dominant_course_id = max(course_avg, key=lambda k: course_avg[k])
         if dominant_course_id == current_course_id:
+            logger.info("[routing] dominant == current → no switch")
             return None, fused
 
         dominant_avg = course_avg[dominant_course_id]
         current_avg = course_avg.get(current_course_id, 0.0)
 
+        logger.info(
+            "[routing] dominant=%s avg=%.5f, current avg=%.5f, delta=%.2f, threshold=%.5f",
+            dominant_course_id, dominant_avg, current_avg,
+            self.context_routing_delta,
+            current_avg * (1.0 + self.context_routing_delta),
+        )
+
         if current_avg > 0.0 and dominant_avg < current_avg * (1.0 + self.context_routing_delta):
+            logger.info("[routing] delta too small → no switch")
             return None, fused
 
         try:
