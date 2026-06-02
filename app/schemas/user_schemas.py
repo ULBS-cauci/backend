@@ -74,7 +74,7 @@ class UserSetting(UserSettingBase, TimeSchema, table=True):
 
 
 class UserSettingUpdate(SQLModel):
-    custom_system_prompt: Optional[str] = None
+    custom_system_prompt: Optional[str] = Field(default=None, max_length=4000)
     selected_system_prompt_id: Optional[uuid.UUID] = None
 
 
