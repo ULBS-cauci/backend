@@ -38,21 +38,31 @@ TUTOR_SYSTEM_PROMPT = (
     "You are a university tutor for the AI Tutor platform. "
     "Help students understand concepts clearly and concisely. "
     "If you are not sure about something, say so. "
-    "Always respond in the same language the student used in their question."
+    "ALWAYS write your entire reply in the same language as the student's most recent "
+    "message. If that message is in Romanian, answer in Romanian; if it is in English, "
+    "answer in English; and so on. Never switch languages on your own."
+)
+
+# Dedicated prompt for the "nothing to answer from" case (no retrieved context, no
+# attachments, no prior conversation). It deliberately omits the helpful-tutor persona so
+# the model does not fall back on general knowledge — its only job is to refuse politely,
+# in the student's own language. This is a hard guarantee that complements (not replaces)
+# the softer no-context guard inside _build_context_messages, which is still used whenever
+# there IS prior conversation the student may be referring to.
+REFUSAL_SYSTEM_PROMPT = (
+    "You are the ULBS AI Tutor. The student's question CANNOT be answered: there is no "
+    "relevant content in the uploaded course materials, no attached files, and no prior "
+    "conversation to draw on. "
+    "You MUST NOT answer the question and MUST NOT use any general knowledge of your own. "
+    "Reply with a single short, polite message stating that you can only help with "
+    "questions based on the uploaded course materials and that you did not find anything "
+    "relevant for this question. Do not add explanations, facts, or follow-up offers. "
+    "Write your reply in the same language as the student's message."
 )
 
 # Bounds on attachment text injected into the LLM prompt to prevent context blow-up / DoS.
 MAX_ATTACHMENT_CHARS = 10_000
 MAX_TOTAL_ATTACHMENT_CHARS = 30_000
-
-_NO_CONTEXT_FALLBACK = (
-    "Ne pare rău, pot răspunde doar la întrebări bazate pe materialele de curs "
-    "încărcate pe această platformă. Nu am găsit conținut relevant în baza de "
-    "cunoștințe pentru întrebarea ta.\n\n"
-    "I'm sorry, but I can only answer questions based on the course materials "
-    "that have been uploaded to this platform. I couldn't find any relevant content "
-    "in the knowledge base for your question."
-)
 
 
 class ChatService:
@@ -181,14 +191,17 @@ class ChatService:
                 user_message.id, attachment_ids, user_id
             )
 
+        # With nothing relevant to ground an answer (no context, no attachments, no prior
+        # turns) we hard-refuse via the refusal-only prompt instead of trusting the softer
+        # guard prompt, which the model can override with general knowledge. When prior
+        # conversation exists the student may be asking to rephrase/translate it, so the
+        # full context messages (with the no-context guard) decide whether to answer.
         if not context and not attachment_texts and not history:
-            yield ChunkEvent(content=_NO_CONTEXT_FALLBACK)
-            await self._persist_message(conversation_id, MessageSender.AI, _NO_CONTEXT_FALLBACK)
-            return
-
-        messages = self._build_context_messages(
-            history, context, query, attachment_texts
-        )
+            messages = self._build_refusal_messages(query)
+        else:
+            messages = self._build_context_messages(
+                history, context, query, attachment_texts
+            )
 
         yield StatusEvent(message="Generating answer...")
         chunks = []
@@ -196,13 +209,28 @@ class ChatService:
             chunks.append(chunk)
             yield ChunkEvent(content=chunk)
 
-        await self._persist_message(conversation_id, MessageSender.AI, "".join(chunks))
+        new_content = "".join(chunks)
+        if not new_content.strip():
+            # Don't persist a blank AI turn; surface an error so the client can retry.
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="The model returned an empty response. Please try again.",
+            )
+        await self._persist_message(conversation_id, MessageSender.AI, new_content)
 
     async def regenerate_stream(
         self,
         conversation_id: uuid.UUID,
         user_id: uuid.UUID,
     ) -> AsyncIterator[StreamEvent]:
+        # Defense in depth: don't rely solely on the router's ownership check.
+        conversation = await self.get_conversation_for_user(conversation_id, user_id)
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found or unauthorized",
+            )
+
         all_messages = await self.get_conversation_messages(conversation_id)
 
         if not all_messages or all_messages[-1].sender != MessageSender.AI:
@@ -210,7 +238,7 @@ class ChatService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Last message is not an AI response; nothing to regenerate",
             )
-        last_ai_msg = all_messages[-1]
+        target_ai_msg = all_messages[-1]
 
         last_user_msg = next(
             (m for m in reversed(all_messages[:-1]) if m.sender == MessageSender.USER),
@@ -224,9 +252,13 @@ class ChatService:
 
         last_user_idx = next(i for i, m in enumerate(all_messages) if m.id == last_user_msg.id)
         context_history = all_messages[:last_user_idx]
+        # Any stray messages between the user turn and the AI answer we're regenerating
+        # (normally none) are orphans — delete them so the turn stays consistent.
+        orphan_messages = all_messages[last_user_idx + 1:-1]
         query = last_user_msg.content
 
-        # Re-fetch attachment texts that were linked to the original user message
+        # Re-fetch every attachment linked to the original user prompt so the regenerated
+        # answer is grounded on the exact same files the student attached.
         attachment_texts: List[tuple[str, str]] = []
         attachments_stmt = select(Attachment).where(Attachment.message_id == last_user_msg.id)
         attachments_result = await self.db_session.exec(attachments_stmt)
@@ -242,20 +274,15 @@ class ChatService:
             search_query, collection_name=QDRANT_MATERIALS_COLLECTION
         )
 
-        if not context and not attachment_texts:
-            yield ChunkEvent(content=_NO_CONTEXT_FALLBACK)
-            conversation = await self.db_session.get(Conversation, conversation_id)
-            conversation.updated_at = datetime.datetime.now(
-                datetime.timezone.utc
-            ).replace(tzinfo=None)
-            self.db_session.add(conversation)
-            await self.db_session.delete(last_ai_msg)
-            await self._persist_message(conversation_id, MessageSender.AI, _NO_CONTEXT_FALLBACK)
-            return
-
-        llm_messages = self._build_context_messages(
-            context_history, context, query, attachment_texts, regenerate=True
-        )
+        # Same policy as ask_stream: hard-refuse when there is nothing to ground an answer
+        # on (no context, no attachments, no earlier conversation), otherwise build the full
+        # context messages so an alternative answer / rephrase can be produced.
+        if not context and not attachment_texts and not context_history:
+            llm_messages = self._build_refusal_messages(query)
+        else:
+            llm_messages = self._build_context_messages(
+                context_history, context, query, attachment_texts, regenerate=True
+            )
 
         yield StatusEvent(message="Generating answer...")
         chunks: list[str] = []
@@ -263,13 +290,27 @@ class ChatService:
             chunks.append(chunk)
             yield ChunkEvent(content=chunk)
 
-        conversation = await self.db_session.get(Conversation, conversation_id)
+        new_content = "".join(chunks)
+        if not new_content.strip():
+            # The model produced nothing. Do NOT overwrite the previous answer — replacing a
+            # good response with an empty one would be irrecoverable data loss.
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="The model returned an empty response; the previous answer was kept.",
+            )
+
+        for orphan in orphan_messages:
+            await self.db_session.delete(orphan)
+        # Update the answer in place (keep id + created_at) instead of delete-then-insert:
+        # the frontend keeps its message reference, ordering is stable, and two concurrent
+        # regenerations write the same row (last-writer-wins) rather than duplicating.
+        target_ai_msg.content = new_content
+        self.db_session.add(target_ai_msg)
         conversation.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(
             tzinfo=None
         )
         self.db_session.add(conversation)
-        await self.db_session.delete(last_ai_msg)
-        await self._persist_message(conversation_id, MessageSender.AI, "".join(chunks))
+        await self.db_session.commit()
 
     async def _get_or_create_conversation(
         self,
@@ -319,6 +360,13 @@ class ChatService:
             .replace("<", "&lt;")
             .replace(">", "&gt;")
         )
+
+    def _build_refusal_messages(self, query: str) -> List[ChatMessage]:
+        """Messages for the hard-refusal path: refuse in the student's language, no answer."""
+        return [
+            ChatMessage(role=MessageRole.SYSTEM, content=REFUSAL_SYSTEM_PROMPT),
+            ChatMessage(role=MessageRole.USER, content=query),
+        ]
 
     def _build_context_messages(
         self,
@@ -389,8 +437,10 @@ class ChatService:
                         "'in other words', 'translate', 'elaborate'), you MUST fulfill that request using only "
                         "the content already covered in this conversation — do not add new information. "
                         "If the student's question can be answered from the attached files shown above, do so. "
-                        "For any genuinely new question outside the conversation and course materials, "
-                        "refuse and inform the student."
+                        "For any genuinely new question that is unrelated to this conversation and absent from the "
+                        "course materials, do NOT guess or invent an answer: briefly tell the student you don't know "
+                        "and that you can only help with the uploaded course materials. "
+                        "Write that refusal in the same language as the student's most recent message."
                     ),
                 )
             )
@@ -521,10 +571,12 @@ class ChatService:
 
         fused = rrf_fuse(semantic_results, keyword_results, limit=limit * 2)
         reranked = await self.reranker.rerank(query, fused, top_n=limit)
+        top_score = reranked[0].score if reranked else 0.0
         above_threshold = [res for res in reranked if res.score >= self.score_threshold]
         if not above_threshold:
             logger.info(
-                f"No chunks above threshold {self.score_threshold} for query '{query}'"
+                f"No chunks above threshold {self.score_threshold} "
+                f"(best reranker score={top_score:.4f}) for query '{query}'"
             )
             return ""
         return "\n---\n".join(res.chunk.text for res in above_threshold)
