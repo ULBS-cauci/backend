@@ -12,7 +12,7 @@ logger = logging.getLogger("uvicorn.error")
 # Important: We must import all SQLModel schemas here so that SQLModel.metadata is fully
 # populated before we try to create the tables natively.
 from app.schemas.course_schemas import Course
-from app.schemas.user_schemas import User
+from app.schemas.user_schemas import User, UserSetting
 from app.schemas.knowledge_schemas import Material
 from app.schemas.chat_schemas import Conversation, Message, Attachment, SharedLink, OutputFormat
 from app.schemas.admin_schemas import SystemPrompt, LlmTip, TipCategory
@@ -74,7 +74,7 @@ async def lifespan(app: FastAPI):
         logger.info("Database engine disposed.")
 
 
-from app.api.routers import sessions, course
+from app.api.routers import sessions, course, user
 
 app = FastAPI(
     title="AI Tutor API",
@@ -93,6 +93,7 @@ app.add_middleware(
 
 app.include_router(sessions.router, prefix="/api/v1/sessions", tags=["Sessions"])
 app.include_router(course.router,   prefix="/api/v1/courses",  tags=["Courses"])
+app.include_router(user.router,     prefix="/api/v1/user",     tags=["User"])
 
 
 @app.get("/")

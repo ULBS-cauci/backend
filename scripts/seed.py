@@ -65,7 +65,7 @@ from app.schemas.chat_schemas import (
 )
 from app.schemas.course_schemas import Course
 from app.schemas.knowledge_schemas import Material
-from app.schemas.user_schemas import User, UserRole
+from app.schemas.user_schemas import User, UserRole, UserSetting
 
 # ── logging setup ─────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -86,6 +86,7 @@ logging.getLogger("transformers").setLevel(logging.WARNING)
 
 # ── UploadFile shim ───────────────────────────────────────────────────────────
 
+
 class _SeederUploadFile:
     """
     Minimal shim that satisfies the parts of fastapi.UploadFile used by FileService:
@@ -105,6 +106,7 @@ class _SeederUploadFile:
 
 # ── password hashing (stdlib PBKDF2 — no passlib/bcrypt required) ────────────
 
+
 def hash_password(plain: str) -> str:
     """Hash using PBKDF2-HMAC-SHA256 (stdlib only). Format is self-describing."""
     salt: bytes = secrets.token_bytes(16)
@@ -119,39 +121,44 @@ def hash_password(plain: str) -> str:
 
 # ── seed UUID constants ───────────────────────────────────────────────────────
 
+
 class SeedIDs:
     """Fixed UUIDs for all seed records — enables idempotency via session.get()."""
 
     # ── Users ─────────────────────────────────────────────────────────────────
-    ADMIN   = uuid.UUID("00000000-0000-0000-0000-000000000003")
-    PROF    = uuid.UUID("123e4567-e89b-12d3-a456-426614174001")  # professor — owns the seeded catalog courses
+    ADMIN = uuid.UUID("00000000-0000-0000-0000-000000000003")
+    PROF = uuid.UUID(
+        "123e4567-e89b-12d3-a456-426614174001"
+    )  # professor — owns the seeded catalog courses
     STUDENT = uuid.UUID("00000000-0000-0000-0000-000000000001")  # dummy dev user
 
     # ── Courses ───────────────────────────────────────────────────────────────
-    DEV_COURSE = uuid.UUID("00000000-0000-0000-0000-000000000002")  # course held by the dummy dev student
-    COURSE_1   = uuid.UUID("123e4567-e89b-12d3-a456-426614174000")
-    COURSE_2   = uuid.UUID("00000000-0000-0000-0000-000000000010")
-    COURSE_3   = uuid.UUID("00000000-0000-0000-0000-000000000011")
-    COURSE_4   = uuid.UUID("00000000-0000-0000-0000-000000000012")
-    COURSE_5   = uuid.UUID("00000000-0000-0000-0000-000000000013")
-    COURSE_6   = uuid.UUID("00000000-0000-0000-0000-000000000014")
-    COURSE_7   = uuid.UUID("00000000-0000-0000-0000-000000000015")
-    COURSE_8   = uuid.UUID("00000000-0000-0000-0000-000000000016")
-    COURSE_9   = uuid.UUID("00000000-0000-0000-0000-000000000017")
-    COURSE_10  = uuid.UUID("00000000-0000-0000-0000-000000000018")
-    COURSE_11  = uuid.UUID("00000000-0000-0000-0000-000000000019")
-    COURSE_12  = uuid.UUID("00000000-0000-0000-0000-00000000001a")
+    DEV_COURSE = uuid.UUID(
+        "00000000-0000-0000-0000-000000000002"
+    )  # course held by the dummy dev student
+    COURSE_1 = uuid.UUID("123e4567-e89b-12d3-a456-426614174000")
+    COURSE_2 = uuid.UUID("00000000-0000-0000-0000-000000000010")
+    COURSE_3 = uuid.UUID("00000000-0000-0000-0000-000000000011")
+    COURSE_4 = uuid.UUID("00000000-0000-0000-0000-000000000012")
+    COURSE_5 = uuid.UUID("00000000-0000-0000-0000-000000000013")
+    COURSE_6 = uuid.UUID("00000000-0000-0000-0000-000000000014")
+    COURSE_7 = uuid.UUID("00000000-0000-0000-0000-000000000015")
+    COURSE_8 = uuid.UUID("00000000-0000-0000-0000-000000000016")
+    COURSE_9 = uuid.UUID("00000000-0000-0000-0000-000000000017")
+    COURSE_10 = uuid.UUID("00000000-0000-0000-0000-000000000018")
+    COURSE_11 = uuid.UUID("00000000-0000-0000-0000-000000000019")
+    COURSE_12 = uuid.UUID("00000000-0000-0000-0000-00000000001a")
 
     # ── Materials (mock mode — fixed UUIDs for idempotency) ───────────────────
-    MAT_1  = uuid.UUID("00000000-0000-0000-0000-000000000020")
-    MAT_2  = uuid.UUID("00000000-0000-0000-0000-000000000021")
-    MAT_3  = uuid.UUID("00000000-0000-0000-0000-000000000022")
-    MAT_4  = uuid.UUID("00000000-0000-0000-0000-000000000023")
-    MAT_5  = uuid.UUID("00000000-0000-0000-0000-000000000024")
-    MAT_6  = uuid.UUID("00000000-0000-0000-0000-000000000025")
-    MAT_7  = uuid.UUID("00000000-0000-0000-0000-000000000026")
-    MAT_8  = uuid.UUID("00000000-0000-0000-0000-000000000027")
-    MAT_9  = uuid.UUID("00000000-0000-0000-0000-000000000028")
+    MAT_1 = uuid.UUID("00000000-0000-0000-0000-000000000020")
+    MAT_2 = uuid.UUID("00000000-0000-0000-0000-000000000021")
+    MAT_3 = uuid.UUID("00000000-0000-0000-0000-000000000022")
+    MAT_4 = uuid.UUID("00000000-0000-0000-0000-000000000023")
+    MAT_5 = uuid.UUID("00000000-0000-0000-0000-000000000024")
+    MAT_6 = uuid.UUID("00000000-0000-0000-0000-000000000025")
+    MAT_7 = uuid.UUID("00000000-0000-0000-0000-000000000026")
+    MAT_8 = uuid.UUID("00000000-0000-0000-0000-000000000027")
+    MAT_9 = uuid.UUID("00000000-0000-0000-0000-000000000028")
     MAT_10 = uuid.UUID("00000000-0000-0000-0000-000000000029")
     MAT_11 = uuid.UUID("00000000-0000-0000-0000-00000000002a")
     MAT_12 = uuid.UUID("00000000-0000-0000-0000-00000000002b")
@@ -175,6 +182,11 @@ class SeedIDs:
     # ── System prompts ────────────────────────────────────────────────────────
     SPROMPT_1 = uuid.UUID("00000000-0000-0000-0000-000000000060")
     SPROMPT_2 = uuid.UUID("00000000-0000-0000-0000-000000000061")
+    SPROMPT_3 = uuid.UUID("00000000-0000-0000-0000-000000000062")
+    SPROMPT_4 = uuid.UUID("00000000-0000-0000-0000-000000000063")
+    SPROMPT_5 = uuid.UUID("00000000-0000-0000-0000-000000000064")
+    SPROMPT_6 = uuid.UUID("00000000-0000-0000-0000-000000000065")
+    SPROMPT_7 = uuid.UUID("00000000-0000-0000-0000-000000000066")
 
     # ── LLM tips ──────────────────────────────────────────────────────────────
     TIP_1 = uuid.UUID("00000000-0000-0000-0000-000000000070")
@@ -192,15 +204,16 @@ class SeedIDs:
 # ── reset: reverse FK order ───────────────────────────────────────────────────
 
 _TRUNCATE_ORDER: list[str] = [
+    "user_settings",  # references users + system_prompts; no children
     "attachments",
     "shared_links",
     "messages",
-    "output_formats",   # referenced by messages.output_format_id
+    "output_formats",  # referenced by messages.output_format_id
     "conversations",
     "materials",
     "system_prompts",
     "llm_tips",
-    "tip_categories",   # referenced by llm_tips.category_id
+    "tip_categories",  # referenced by llm_tips.category_id
     "courses",
     "users",
 ]
@@ -221,6 +234,7 @@ async def do_reset(session: AsyncSession, dry_run: bool) -> None:
 
 
 # ── generic idempotency helper ────────────────────────────────────────────────
+
 
 async def _upsert(
     session: AsyncSession,
@@ -403,15 +417,15 @@ SEED_COURSES: list[dict[str, Any]] = [
 # Course assignment is determined at runtime by _pick_two_courses().
 
 SEED_MATERIAL_TITLES: list[tuple[uuid.UUID, str]] = [
-    (SeedIDs.MAT_1,  "lecture01_intro_to_ai.pdf"),
-    (SeedIDs.MAT_2,  "lecture02_search_algorithms.pdf"),
-    (SeedIDs.MAT_3,  "lecture03_knowledge_representation.pdf"),
-    (SeedIDs.MAT_4,  "lecture04_machine_learning_basics.pdf"),
-    (SeedIDs.MAT_5,  "lecture05_neural_networks.pdf"),
-    (SeedIDs.MAT_6,  "sorting_and_searching_notes.pdf"),
-    (SeedIDs.MAT_7,  "graph_theory_and_traversals.pdf"),
-    (SeedIDs.MAT_8,  "dynamic_programming_techniques.pdf"),
-    (SeedIDs.MAT_9,  "os_process_scheduling.pdf"),
+    (SeedIDs.MAT_1, "lecture01_intro_to_ai.pdf"),
+    (SeedIDs.MAT_2, "lecture02_search_algorithms.pdf"),
+    (SeedIDs.MAT_3, "lecture03_knowledge_representation.pdf"),
+    (SeedIDs.MAT_4, "lecture04_machine_learning_basics.pdf"),
+    (SeedIDs.MAT_5, "lecture05_neural_networks.pdf"),
+    (SeedIDs.MAT_6, "sorting_and_searching_notes.pdf"),
+    (SeedIDs.MAT_7, "graph_theory_and_traversals.pdf"),
+    (SeedIDs.MAT_8, "dynamic_programming_techniques.pdf"),
+    (SeedIDs.MAT_9, "os_process_scheduling.pdf"),
     (SeedIDs.MAT_10, "database_normalization_and_sql.pdf"),
     (SeedIDs.MAT_11, "network_protocols_overview.pdf"),
     (SeedIDs.MAT_12, "cybersecurity_fundamentals.pdf"),
@@ -524,6 +538,48 @@ SEED_SYSTEM_PROMPTS: list[dict[str, Any]] = [
         ),
         "author_id": SeedIDs.ADMIN,
     },
+    {
+        "id": SeedIDs.SPROMPT_3,
+        "title": "Explain Simply",
+        "content": (
+            "Explain concepts in plain, everyday language as if teaching a motivated beginner. "
+            "Avoid jargon; when a technical term is unavoidable, define it immediately. Use at "
+            "least one concrete real-world analogy per concept and keep sentences short. Base "
+            "every explanation on the provided course materials."
+        ),
+        "author_id": SeedIDs.ADMIN,
+    },
+    {
+        "id": SeedIDs.SPROMPT_4,
+        "title": "Step-by-Step Solver",
+        "content": (
+            "Break every answer into clearly numbered steps. Show your reasoning for each step "
+            "before moving on, and state which concept or formula justifies it. Do not skip "
+            "intermediate steps, even obvious ones. End with a one-line summary of the result. "
+            "Stay grounded in the course materials."
+        ),
+        "author_id": SeedIDs.ADMIN,
+    },
+    {
+        "id": SeedIDs.SPROMPT_5,
+        "title": "Concise Mode",
+        "content": (
+            "Be brief and direct. Lead with the answer in one or two sentences, then add at most "
+            "a few bullet points of supporting detail. No preamble, no repetition. If the course "
+            "materials do not cover the question, say so immediately."
+        ),
+        "author_id": SeedIDs.ADMIN,
+    },
+    {
+        "id": SeedIDs.SPROMPT_6,
+        "title": "Deep Dive",
+        "content": (
+            "Give a rigorous, detailed explanation. Include formal definitions, why the concept "
+            "matters, how it connects to related topics in the course, common pitfalls, and edge "
+            "cases. Use examples from the course materials wherever possible."
+        ),
+        "author_id": SeedIDs.ADMIN,
+    },
 ]
 
 SEED_TIP_CATEGORIES: list[dict[str, Any]] = [
@@ -610,6 +666,7 @@ SEED_LLM_TIPS: list[dict[str, Any]] = [
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
+
 def _pick_two_courses(all_courses: list[Course]) -> tuple[Course, Course]:
     """
     Select exactly 2 distinct professor-held courses at random.
@@ -627,6 +684,7 @@ def _pick_two_courses(all_courses: list[Course]) -> tuple[Course, Course]:
 
 
 # ── seeder functions ──────────────────────────────────────────────────────────
+
 
 async def seed_users(session: AsyncSession, dry_run: bool) -> list[User]:
     results: list[User] = []
@@ -652,6 +710,7 @@ async def seed_courses(
 
 # ── material seeding: mock mode ───────────────────────────────────────────────
 
+
 async def seed_materials_mock(
     session: AsyncSession,
     dry_run: bool,
@@ -667,7 +726,8 @@ async def seed_materials_mock(
     course_a, course_b = _pick_two_courses(courses)
     logger.info(
         "Mock materials: assigning to courses '%s' and '%s'",
-        course_a.title, course_b.title,
+        course_a.title,
+        course_b.title,
     )
 
     results: list[Material] = []
@@ -688,6 +748,7 @@ async def seed_materials_mock(
 
 
 # ── material seeding: embed mode ──────────────────────────────────────────────
+
 
 async def seed_materials_embed(
     session: AsyncSession,
@@ -711,15 +772,15 @@ async def seed_materials_embed(
     course_a, course_b = _pick_two_courses(courses)
     logger.info(
         "Embed mode: %d PDF(s) found. Assigning to courses '%s' and '%s'.",
-        len(pdf_files), course_a.title, course_b.title,
+        len(pdf_files),
+        course_a.title,
+        course_b.title,
     )
 
     if dry_run:
         for i, pdf in enumerate(pdf_files):
             target = course_a if i % 2 == 0 else course_b
-            logger.info(
-                "DRY-RUN  embed %-40s → course '%s'", pdf.name, target.title
-            )
+            logger.info("DRY-RUN  embed %-40s → course '%s'", pdf.name, target.title)
         return []
 
     # ── Wire up FileService using the cached private factories ────────────────
@@ -740,7 +801,9 @@ async def seed_materials_embed(
     logger.info(
         "Initialising sparse encoder (BGE-M3, ~570 MB download on first use)..."
     )
-    await asyncio.to_thread(_get_bgem3_sparse_encoder)  # pre-warm lru_cache; first call downloads ~570 MB
+    await asyncio.to_thread(
+        _get_bgem3_sparse_encoder
+    )  # pre-warm lru_cache; first call downloads ~570 MB
 
     executor = ThreadPoolExecutor(max_workers=2)
     minio = _get_minio_client()
@@ -772,7 +835,7 @@ async def seed_materials_embed(
             try:
                 # FileService does its own session.commit() per file — intentional.
                 material = await file_service.upload_and_index(
-                    upload_file,         # type: ignore[arg-type]  — satisfies the duck-type contract
+                    upload_file,  # type: ignore[arg-type]  — satisfies the duck-type contract
                     course_id=target_course.id,
                     user_id=SeedIDs.PROF,
                 )
@@ -789,6 +852,7 @@ async def seed_materials_embed(
 
 # ── material dispatcher ───────────────────────────────────────────────────────
 
+
 async def seed_materials(
     session: AsyncSession,
     dry_run: bool,
@@ -802,6 +866,7 @@ async def seed_materials(
 
 
 # ── remaining seeders ─────────────────────────────────────────────────────────
+
 
 async def seed_conversations(
     session: AsyncSession,
@@ -825,7 +890,9 @@ async def seed_messages(
     results: list[Message] = []
     for data in SEED_MESSAGES:
         instance = Message(**data)
-        saved = await _upsert(session, Message, data["id"], instance, dry_run, "Message")
+        saved = await _upsert(
+            session, Message, data["id"], instance, dry_run, "Message"
+        )
         results.append(saved)
     return results
 
@@ -856,7 +923,9 @@ async def seed_system_prompts(
     return results
 
 
-async def seed_tip_categories(session: AsyncSession, dry_run: bool) -> list[TipCategory]:
+async def seed_tip_categories(
+    session: AsyncSession, dry_run: bool
+) -> list[TipCategory]:
     results: list[TipCategory] = []
     for data in SEED_TIP_CATEGORIES:
         instance = TipCategory(**data)
@@ -878,6 +947,7 @@ async def seed_llm_tips(session: AsyncSession, dry_run: bool) -> list[LlmTip]:
 
 # ── orchestrator ──────────────────────────────────────────────────────────────
 
+
 async def run_seed(
     dry_run: bool,
     reset: bool,
@@ -891,8 +961,8 @@ async def run_seed(
             await do_reset(session, dry_run)
 
         # FK-safe insertion order: parents before children
-        users         = await seed_users(session, dry_run)
-        courses       = await seed_courses(session, dry_run, users)
+        users = await seed_users(session, dry_run)
+        courses = await seed_courses(session, dry_run, users)
         # Materials may commit internally (embed mode) — must run before other
         # flushed-but-not-committed records accumulate in the session.
         await seed_materials(session, dry_run, courses, embed_folder)
@@ -913,6 +983,7 @@ async def run_seed(
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -935,7 +1006,7 @@ def parse_args() -> argparse.Namespace:
         "--embed",
         nargs="?",
         const=str(_BACKEND_DIR / "scripts" / "seed_materials"),
-        default=None,                     # value when flag is absent entirely
+        default=None,  # value when flag is absent entirely
         metavar="FOLDER",
         help=(
             "Embed real PDFs into Qdrant+MinIO and create Material records. "
@@ -962,12 +1033,16 @@ def main() -> None:
             )
         logger.info("Embed mode: reading PDFs from %s", embed_folder)
     else:
-        logger.info("Mock mode: creating placeholder Material records (no actual files).")
+        logger.info(
+            "Mock mode: creating placeholder Material records (no actual files)."
+        )
 
     if args.dry_run:
         logger.info("DRY-RUN mode — no DB changes will be made.")
 
-    asyncio.run(run_seed(dry_run=args.dry_run, reset=args.reset, embed_folder=embed_folder))
+    asyncio.run(
+        run_seed(dry_run=args.dry_run, reset=args.reset, embed_folder=embed_folder)
+    )
 
 
 if __name__ == "__main__":
