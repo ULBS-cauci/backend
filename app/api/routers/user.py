@@ -70,6 +70,4 @@ async def update_settings(
     row.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
 
     db.add(row)
-    await db.commit()
-    await db.refresh(row)
     return row
