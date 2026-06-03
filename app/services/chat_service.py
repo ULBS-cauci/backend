@@ -165,10 +165,10 @@ class ChatService:
             ),
         ]
         raw = await self.llm_client.generate(messages)
-        match = re.search(r"\{.*\}", raw, re.DOTALL)
-        if match:
+        idx = raw.find("{")
+        if idx != -1:
             try:
-                return json.loads(match.group())
+                return json.JSONDecoder().raw_decode(raw, idx)[0]
             except json.JSONDecodeError:
                 pass
         return {"correct": False, "feedback": raw.strip()}
@@ -184,7 +184,12 @@ class ChatService:
         if not output_format_id:
             return None
         fmt = await self.db_session.get(OutputFormat, output_format_id)
-        return fmt.name if fmt else None
+        if fmt is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Unknown output format.",
+            )
+        return fmt.name
 
     async def ask_stream(
         self,

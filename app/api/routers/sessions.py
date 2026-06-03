@@ -6,7 +6,6 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.dependencies import (
@@ -22,6 +21,8 @@ from app.schemas.chat_schemas import (
     Attachment,
     AttachmentPublic,
     ConversationPublic,
+    GradeAnswerRequest,
+    GradeAnswerResponse,
     MessageCreate,
     MessagePublic,
     OutputFormatPublic,
@@ -48,17 +49,6 @@ async def create_conversation(
     service: ChatService = Depends(get_chat_service),
 ):
     return await service.create_conversation(user_id=current_user.id)
-
-
-class GradeAnswerRequest(BaseModel):
-    question: str
-    reference_answer: str
-    student_answer: str
-
-
-class GradeAnswerResponse(BaseModel):
-    correct: bool
-    feedback: str
 
 
 @router.post("/grade-answer", response_model=GradeAnswerResponse)
