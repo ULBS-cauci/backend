@@ -65,6 +65,8 @@ class QdrantClient(VectorDBInterface):
         query_vector: List[float],
         limit: int = 5,
     ) -> List[SearchResult]:
+        if not await self.client.collection_exists(collection_name):
+            return []
         response = await self.client.query_points(
             collection_name=collection_name,
             query=query_vector,
@@ -80,6 +82,8 @@ class QdrantClient(VectorDBInterface):
         sparse_query: SparseVectorSchema,
         limit: int = 5,
     ) -> List[SearchResult]:
+        if not await self.client.collection_exists(collection_name):
+            return []
         response = await self.client.query_points(
             collection_name=collection_name,
             query=SparseVector(
