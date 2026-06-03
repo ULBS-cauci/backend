@@ -68,7 +68,9 @@ class UserSettingBase(SQLModel):
 
 class UserSetting(UserSettingBase, TimeSchema, table=True):
     __tablename__ = "user_settings"  # type: ignore
-    user_id: uuid.UUID = Field(foreign_key="users.id", primary_key=True)
+    user_id: uuid.UUID = Field(
+        foreign_key="users.id", primary_key=True, ondelete="CASCADE"
+    )
     selected_system_prompt_id: Optional[uuid.UUID] = Field(
         default=None, foreign_key="system_prompts.id"
     )
