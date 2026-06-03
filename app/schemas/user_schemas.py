@@ -63,14 +63,15 @@ class UserPublic(UserBase):
 # ---------------------------------------------------------
 class UserSettingBase(SQLModel):
     custom_system_prompt: Optional[str] = None
-    selected_system_prompt_id: Optional[uuid.UUID] = Field(
-        default=None, foreign_key="system_prompts.id"
-    )
+    selected_system_prompt_id: Optional[uuid.UUID] = None
 
 
 class UserSetting(UserSettingBase, TimeSchema, table=True):
     __tablename__ = "user_settings"  # type: ignore
     user_id: uuid.UUID = Field(foreign_key="users.id", primary_key=True)
+    selected_system_prompt_id: Optional[uuid.UUID] = Field(
+        default=None, foreign_key="system_prompts.id"
+    )
 
 
 class UserSettingUpdate(SQLModel):
