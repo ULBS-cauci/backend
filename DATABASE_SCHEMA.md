@@ -105,6 +105,15 @@ erDiagram
         datetime created_at
     }
 
+    %% 5. Per-User Settings
+    user_settings {
+        UUID user_id PK,FK "Ref: users.id (ON DELETE CASCADE)"
+        string custom_system_prompt "nullable"
+        UUID selected_system_prompt_id FK "Ref: system_prompts.id (nullable)"
+        datetime created_at
+        datetime updated_at
+    }
+
     %% Relationships
     %% Identity & Setup
     users ||--o{ courses : "held_by"
@@ -125,6 +134,10 @@ erDiagram
 
     %% Tips
     tip_categories ||--o{ llm_tips : "categorises"
+
+    %% Per-User Settings (user_id is PK → at most one row per user)
+    users ||--o| user_settings : "configures"
+    system_prompts ||--o{ user_settings : "selected_in"
 ```
 
 ## Class Diagram
@@ -229,6 +242,14 @@ classDiagram
         +DateTime created_at
     }
 
+    class UserSetting {
+        +UUID user_id
+        +String custom_system_prompt
+        +UUID selected_system_prompt_id
+        +DateTime created_at
+        +DateTime updated_at
+    }
+
     %% Relationships as Class Dependencies / Composition
     User "1" --> "*" Course : creates
     User "1" --> "*" SystemPrompt : authors
@@ -246,6 +267,9 @@ classDiagram
     Message "*" --> "0..1" OutputFormat : requests
 
     TipCategory "1" *-- "*" LlmTip : categorises
+
+    User "1" --> "0..1" UserSetting : configures
+    SystemPrompt "1" <-- "*" UserSetting : selected_by
 ```
 
 ## Object Diagram (Example State)
