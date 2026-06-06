@@ -1,6 +1,7 @@
 import io
 import json
 import uuid
+from pathlib import Path
 from typing import List, Optional
 from urllib.parse import quote
 
@@ -23,8 +24,11 @@ from app.schemas.chat_schemas import (
     Attachment,
     AttachmentPublic,
     ConversationPublic,
+    GradeAnswerRequest,
+    GradeAnswerResponse,
     MessageCreate,
     MessagePublic,
+    OutputFormatPublic,
 )
 from app.schemas.user_schemas import User
 from app.services.chat_service import ChatService
@@ -32,6 +36,15 @@ from app.services.chat_service import ChatService
 router = APIRouter()
 
 MAX_ATTACHMENT_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+
+_ATTACHMENT_MIME_TYPES: dict[str, str] = {
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+}
 
 
 @router.get("/", response_model=List[ConversationPublic])
@@ -53,6 +66,27 @@ async def create_conversation(
     service: ChatService = Depends(get_chat_service),
 ):
     return await service.create_conversation(user_id=current_user.id, course_id=body.course_id)
+
+
+@router.post("/grade-answer", response_model=GradeAnswerResponse)
+async def grade_answer(
+    payload: GradeAnswerRequest,
+    service: ChatService = Depends(get_chat_service),
+):
+    result = await service.grade_free_text_answer(
+        payload.question, payload.reference_answer, payload.student_answer
+    )
+    return GradeAnswerResponse(
+        correct=bool(result.get("correct", False)),
+        feedback=str(result.get("feedback", "")),
+    )
+
+
+@router.get("/output-formats", response_model=List[OutputFormatPublic])
+async def list_output_formats(
+    service: ChatService = Depends(get_chat_service),
+):
+    return await service.list_output_formats()
 
 
 @router.get("/{conversation_id}/messages", response_model=List[MessagePublic])
@@ -80,12 +114,25 @@ async def upload_attachment(
     object_storage: ObjectStorageInterface = Depends(get_object_storage_client),
     db: AsyncSession = Depends(get_db_session),
 ):
-    filename = file.filename or "unnamed.pdf"
-    if not filename.lower().endswith(".pdf"):
+    filename = file.filename or ""
+    suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if not suffix:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Only PDF files are accepted for chat attachments.",
+            detail=(
+                "Cannot determine file type — the file has no extension. "
+                f"Accepted: {', '.join(sorted(_ATTACHMENT_MIME_TYPES))}"
+            ),
         )
+    if suffix not in _ATTACHMENT_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Unsupported file type '.{suffix}'. "
+                f"Accepted: {', '.join(sorted(_ATTACHMENT_MIME_TYPES))}"
+            ),
+        )
+    filename = filename or f"attachment.{suffix}"
 
     # Read up to the size limit + 1 so we can detect oversize uploads without buffering more.
     content = await file.read(MAX_ATTACHMENT_UPLOAD_BYTES + 1)
@@ -105,19 +152,24 @@ async def upload_attachment(
     attachment_id = uuid.uuid4()
     object_key = build_attachment_object_key(current_user.id, attachment_id, filename)
 
-    attachment = Attachment(
-        id=attachment_id,
-        user_id=current_user.id,
-        file_name=filename,
-        object_storage_key=object_key,
-    )
-    db.add(attachment)
-    await db.commit()
-    await db.refresh(attachment)
-
     await object_storage.upload_file(
-        MINIO_ATTACHMENTS_BUCKET, object_key, content, "application/pdf"
+        MINIO_ATTACHMENTS_BUCKET, object_key, content, _ATTACHMENT_MIME_TYPES[suffix]
     )
+
+    try:
+        attachment = Attachment(
+            id=attachment_id,
+            user_id=current_user.id,
+            file_name=filename,
+            object_storage_key=object_key,
+        )
+        db.add(attachment)
+        await db.commit()
+        await db.refresh(attachment)
+    except Exception:
+        await object_storage.delete_file(MINIO_ATTACHMENTS_BUCKET, object_key)
+        raise
+
     return AttachmentPublic.model_validate(attachment)
 
 
@@ -153,9 +205,32 @@ async def download_attachment(
     headers = {
         "Content-Disposition": f'inline; filename="{encoded_name}"; filename*=UTF-8\'\'{encoded_name}'
     }
-    return StreamingResponse(
-        io.BytesIO(data), media_type="application/pdf", headers=headers
-    )
+    suffix = Path(attachment.file_name).suffix.lstrip(".").lower()
+    media_type = _ATTACHMENT_MIME_TYPES.get(suffix, "application/octet-stream")
+    return StreamingResponse(io.BytesIO(data), media_type=media_type, headers=headers)
+
+
+@router.post("/{conversation_id}/regenerate")
+async def regenerate(
+    conversation_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    service: ChatService = Depends(get_chat_service),
+):
+    # Ownership is enforced inside regenerate_stream() (it can't be bypassed by other
+    # callers); an unauthorized/unknown conversation surfaces there as an SSE error event.
+    async def event_stream():
+        try:
+            async for chunk in service.regenerate_stream(
+                conversation_id=conversation_id, user_id=current_user.id
+            ):
+                yield f"data: {chunk.model_dump_json()}\n\n"
+        except HTTPException as exc:
+            yield f"data: {json.dumps({'type': 'error', 'message': exc.detail})}\n\n"
+        except Exception:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'An unexpected error occurred.'})}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @router.post("/ask")
@@ -164,6 +239,12 @@ async def ask(
     current_user: User = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ):
+    if not payload.content.strip() and not payload.attachment_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Message content or attachment required",
+        )
+
     if payload.conversation_id:
         conversation = await service.get_conversation_for_user(
             conversation_id=payload.conversation_id, user_id=current_user.id
@@ -181,7 +262,7 @@ async def ask(
                 user_id=current_user.id,
                 conversation_id=payload.conversation_id,
                 attachment_ids=payload.attachment_ids,
-                force_current_course=payload.force_current_course,
+                output_format_id=payload.output_format_id,
             ):
                 yield f"data: {event.model_dump_json()}\n\n"
         except HTTPException as exc:

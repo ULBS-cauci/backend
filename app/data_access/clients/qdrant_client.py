@@ -73,6 +73,8 @@ class QdrantClient(VectorDBInterface):
         limit: int = 5,
         course_id_filter: Optional[str] = None,
     ) -> List[SearchResult]:
+        if not await self.client.collection_exists(collection_name):
+            return []
         response = await self.client.query_points(
             collection_name=collection_name,
             query=query_vector,
@@ -90,6 +92,8 @@ class QdrantClient(VectorDBInterface):
         limit: int = 5,
         course_id_filter: Optional[str] = None,
     ) -> List[SearchResult]:
+        if not await self.client.collection_exists(collection_name):
+            return []
         response = await self.client.query_points(
             collection_name=collection_name,
             query=SparseVector(

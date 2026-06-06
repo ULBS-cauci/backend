@@ -9,10 +9,12 @@ from pydantic import BaseModel
 from app.schemas.time_schema import TimeSchema, TimestampSchema
 from app.schemas.source_schemas import SourceReference, SourcesEvent
 
-class MessageSender(str, Enum): 
+
+class MessageSender(str, Enum):
     USER = "User"
     SYSTEM = "System"
     AI = "AI"
+
 
 # ==========================================
 # OUTPUT FORMAT  (lookup / reference table)
@@ -44,17 +46,21 @@ class ConversationBase(SQLModel):
     course_id: Optional[uuid.UUID] = Field(default=None, foreign_key="courses.id")
     title: str = Field(default="New Conversation", max_length=255)
 
+
 class Conversation(ConversationBase, TimeSchema, table=True):
     __tablename__ = "conversations"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
 
+
 class ConversationCreate(ConversationBase):
     pass
+
 
 class ConversationPublic(ConversationBase):
     id: uuid.UUID
     created_at: datetime
     updated_at: datetime
+
 
 # ==========================================
 # MESSAGE
@@ -67,14 +73,16 @@ class MessageBase(SQLModel):
         default=None, foreign_key="output_formats.id"
     )
 
+
 class Message(MessageBase, TimestampSchema, table=True):
     __tablename__ = "messages"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     sources: Optional[list] = Field(default=None, sa_column=Column(JSON, nullable=True))
 
+
 class MessageCreate(SQLModel):
     conversation_id: Optional[uuid.UUID] = None
-    content: str = Field(..., min_length=5, description="The content of the message.")
+    content: str = Field(default="", description="The content of the message.")
     output_format_id: Optional[uuid.UUID] = Field(
         default=None,
         description="Optional FK to output_formats — specifies the desired response format.",
@@ -82,12 +90,14 @@ class MessageCreate(SQLModel):
     attachment_ids: List[uuid.UUID] = Field(default_factory=list)
     force_current_course: bool = Field(default=False, description="Skip cross-course routing check for this message.")
 
+
 # ==========================================
 # ATTACHMENT
 # ==========================================
 class AttachmentBase(SQLModel):
     file_name: str = Field(max_length=255)
-    
+
+
 class Attachment(AttachmentBase, TimestampSchema, table=True):
     __tablename__ = "attachments"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -95,16 +105,19 @@ class Attachment(AttachmentBase, TimestampSchema, table=True):
     message_id: Optional[uuid.UUID] = Field(default=None, foreign_key="messages.id")
     object_storage_key: str = Field(max_length=2048)
 
+
 class AttachmentPublic(SQLModel):
     id: uuid.UUID
     file_name: str
     created_at: datetime
+
 
 class MessagePublic(MessageBase):
     id: uuid.UUID
     created_at: datetime
     attachments: List[AttachmentPublic] = Field(default_factory=list)
     sources: Optional[List[SourceReference]] = None
+
 
 # ==========================================
 # SHARED LINK
@@ -114,13 +127,26 @@ class SharedLinkBase(SQLModel):
     token: str = Field(unique=True, max_length=64)
     expires_at: Optional[datetime] = Field(default=None)
 
+
 class SharedLink(SharedLinkBase, TimestampSchema, table=True):
     __tablename__ = "shared_links"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
 
+
 class SharedLinkPublic(SharedLinkBase):
     id: uuid.UUID
     created_at: datetime
+
+
+class GradeAnswerRequest(BaseModel):
+    question: str
+    reference_answer: str
+    student_answer: str
+
+
+class GradeAnswerResponse(BaseModel):
+    correct: bool
+    feedback: str
 
 
 class StatusEvent(BaseModel):
@@ -138,15 +164,7 @@ class ErrorEvent(BaseModel):
     message: str
 
 
-class ContextSwitchRequestEvent(BaseModel):
-    type: Literal["context_switch_request"] = "context_switch_request"
-    detected_course_id: str
-    detected_course_name: str
-
-
 StreamEvent = Annotated[
-    Union[StatusEvent, ChunkEvent, ErrorEvent, SourcesEvent, ContextSwitchRequestEvent],
+    Union[StatusEvent, ChunkEvent, ErrorEvent, SourcesEvent],
     Field(discriminator="type"),
 ]
-
-

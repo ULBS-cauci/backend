@@ -56,7 +56,7 @@ class PostgresSettings(_Base):
 
 class CrossEncoderSettings(_Base):
     CROSS_ENCODER_MODEL: str = "BAAI/bge-reranker-v2-m3"
-    CROSS_ENCODER_SCORE_THRESHOLD: float = 0.0
+    CROSS_ENCODER_SCORE_THRESHOLD: float = 0.5
 
 
 class BM25Settings(_Base):

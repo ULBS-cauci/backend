@@ -6,6 +6,7 @@ from app.schemas.llm_schemas import ChatMessage, MessageRole
 CONDENSATION_SYSTEM_PROMPT = (
     "Given a conversation history and a follow-up question, rewrite the follow-up as a "
     "fully standalone question that can be understood without the conversation history. "
+    "Keep the rewritten question in the same language as the follow-up question. "
     "Output only the rewritten question, nothing else."
 )
 
