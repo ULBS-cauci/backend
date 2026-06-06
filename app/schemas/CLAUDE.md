@@ -16,6 +16,7 @@ directory is changed. Always read it before touching a schema.
 | `admin_schemas.py` — `TipCategory` | new lookup table added | `scripts/seed.py` → `SEED_TIP_CATEGORIES`, `seed_tip_categories()`, `_TRUNCATE_ORDER`, imports; `app/main.py` → startup imports |
 | `admin_schemas.py` — `SystemPrompt` | field added / renamed / removed | `scripts/seed.py` → `SEED_SYSTEM_PROMPTS` dicts + `seed_system_prompts()` |
 | `user_schemas.py` — `User` / `UserRole` | field / enum value changed | `scripts/seed.py` → `SEED_USERS` dicts; `app/api/dependencies.py` → `get_current_user()` dummy user; `app/api/routers/auth.py` |
+| `user_schemas.py` — `UserSetting` | field added / renamed / removed | `app/api/routers/user.py` → `get_settings()` (constructs `UserSettingPublic` with explicit fields) + `update_settings()`. **Not seeded** — only listed in `scripts/seed.py` → `_TRUNCATE_ORDER` |
 | `knowledge_schemas.py` — `Material` | field added / renamed / removed | `scripts/seed.py` → `seed_materials_mock()` (constructs `Material(...)` directly) |
 | `course_schemas.py` — `Course` | field added / renamed / removed | `scripts/seed.py` → `SEED_COURSES` dicts; `app/services/course_service.py`; `app/api/routers/course.py` |
 | `chat_schemas.py` — `Conversation` | field added / renamed / removed | `scripts/seed.py` → `SEED_CONVERSATIONS` dicts; `app/services/chat_service.py` |
@@ -36,13 +37,14 @@ app/
 │       ├── sessions.py              ← uses MessageCreate, ConversationPublic, MessagePublic
 │       ├── course.py                ← uses CourseCreate, CourseDisplay, MaterialPublic (also handles material upload/preview)
 │       ├── auth.py                  ← uses UserCreate, UserPublic, UserRole
+│       ├── user.py                  ← uses UserSetting, UserSettingPublic, UserSettingUpdate, SystemPromptSummary
 │       └── admin.py                 ← uses SystemPromptPublic, LlmTipPublic (stub router)
 ├── services/
 │   ├── chat_service.py              ← constructs Message() / Conversation() directly
 │   ├── course_service.py            ← queries Course
 │   └── file_service.py              ← constructs Material() directly
 └── schemas/                         ← YOU ARE HERE
-    ├── user_schemas.py              ← User, UserRole, UserCreate, UserPublic
+    ├── user_schemas.py              ← User, UserRole, UserCreate, UserPublic; UserSetting + its DTOs
     ├── course_schemas.py            ← Course, CourseCreate, CourseDisplay
     ├── knowledge_schemas.py         ← Material, MaterialCreate, MaterialPublic
     ├── chat_schemas.py              ← OutputFormat, Conversation, Message, Attachment,
