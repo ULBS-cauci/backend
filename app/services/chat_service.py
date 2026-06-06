@@ -253,19 +253,6 @@ class ChatService:
                 search_query, collection_name=QDRANT_MATERIALS_COLLECTION
             )
 
-        # When attachments are present we only FLUSH the user message so it stays uncommitted
-        # until linking succeeds; _link_attachments_to_message then commits both together (and
-        # rolls back the flushed message on failure), keeping message + attachments atomic.
-        # With no attachments there is nothing to link, so commit the message directly.
-        user_message = await self._persist_message(
-            conversation_id, MessageSender.USER, query,
-            output_format_id=output_format_id, flush_only=bool(attachment_ids),
-        )
-        if attachment_ids:
-            await self._link_attachments_to_message(
-                user_message.id, attachment_ids, user_id
-            )
-
         predefined_prompt, custom_prompt = await self._resolve_user_prompts(user_id)
         # With nothing relevant to ground an answer (no context, no attachments, no prior
         # turns) we hard-refuse via the refusal-only prompt instead of trusting the softer
@@ -295,6 +282,24 @@ class ChatService:
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="The model returned an empty response. Please try again.",
             )
+
+        # Persist the whole turn only after generation succeeds. A stopped/disconnected
+        # stream raises CancelledError at the `yield` above and never reaches here, so the
+        # turn is fully discarded with nothing committed (no orphaned user message).
+        #
+        # When attachments are present we only FLUSH the user message so it stays uncommitted
+        # until linking succeeds; _link_attachments_to_message then commits both together (and
+        # rolls back the flushed message on failure), keeping message + attachments atomic.
+        # With no attachments there is nothing to link, so commit the message directly.
+        user_message = await self._persist_message(
+            conversation_id, MessageSender.USER, query,
+            output_format_id=output_format_id, flush_only=bool(attachment_ids),
+        )
+        if attachment_ids:
+            await self._link_attachments_to_message(
+                user_message.id, attachment_ids, user_id
+            )
+
         await self._persist_message(
             conversation_id, MessageSender.AI, new_content,
             output_format_id=output_format_id,
