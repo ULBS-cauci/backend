@@ -10,6 +10,7 @@ logger = logging.getLogger("uvicorn.error")
 
 from app.rag_engine.fusion import rrf_fuse
 from app.rag_engine.query_rewrite import build_condensation_messages
+from app.rag_engine.title import build_title_messages
 from app.data_access.interfaces.llm import LLMInterface
 from app.data_access.interfaces.object_storage import ObjectStorageInterface
 from app.schemas.chat_schemas import (
@@ -148,6 +149,11 @@ class ChatService:
         )
         history = await self.get_conversation_messages(conversation_id)
 
+        if not history:
+            conversation = await self.db_session.get(Conversation, conversation_id)
+            conversation.title = await self._generate_title(query)
+            self.db_session.add(conversation)
+
         attachment_texts: List[str] = []
         if attachment_ids:
             yield StatusEvent(message="Reading your attachments...")
@@ -219,6 +225,25 @@ class ChatService:
         condensed = await self.llm_client.generate(condensation_messages)
         logger.info(f"Condensed query: '{query}' → '{condensed}'")
         return condensed
+
+    async def _generate_title(self, query: str) -> str:
+        fallback = query.strip()[:50]
+        fallback = fallback[:1].upper() + fallback[1:]
+        try:
+            title = (
+                (await self.llm_client.generate(build_title_messages(query)))
+                .strip()
+                .strip('"')
+            )
+        except Exception:
+            logger.warning(
+                "Title generation failed; falling back to query.", exc_info=True
+            )
+            return fallback
+        if not title:
+            return fallback
+        title = title[:1].upper() + title[1:]
+        return title[:255]
 
     async def _resolve_user_prompts(
         self, user_id: uuid.UUID
@@ -306,8 +331,7 @@ class ChatService:
                         "Follow these style instructions for your reply. They take "
                         "priority over the language, wording and formatting of earlier "
                         "messages in this conversation — do NOT imitate how previous "
-                        "answers were written:\n\n"
-                        + predefined_prompt
+                        "answers were written:\n\n" + predefined_prompt
                     ),
                 )
             )
