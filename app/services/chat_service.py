@@ -367,8 +367,9 @@ class ChatService:
         yield StatusEvent(message="Thinking about your question...")
         search_query = await self._condense_query(context_history, query)
         yield StatusEvent(message="Searching the knowledge base...")
-        context, _ = await self._retrieve_relevant_chunks(
-            search_query, collection_name=QDRANT_MATERIALS_COLLECTION
+        course_id_scope = str(conversation.course_id) if conversation.course_id else None
+        context, sources = await self._retrieve_relevant_chunks(
+            search_query, collection_name=QDRANT_MATERIALS_COLLECTION, course_id=course_id_scope
         )
 
         format_name = await self._resolve_output_format_name(target_ai_msg.output_format_id)
@@ -400,12 +401,16 @@ class ChatService:
         for orphan in orphan_messages:
             await self.db_session.delete(orphan)
         target_ai_msg.content = new_content
+        target_ai_msg.sources = [s.model_dump(mode="json") for s in sources] if sources else None
         self.db_session.add(target_ai_msg)
         conversation.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(
             tzinfo=None
         )
         self.db_session.add(conversation)
         await self.db_session.commit()
+
+        if sources:
+            yield SourcesEvent(sources=sources)
 
     async def _get_or_create_conversation(
         self,
