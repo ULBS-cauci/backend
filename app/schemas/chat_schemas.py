@@ -133,6 +133,17 @@ class SharedLinkPublic(SharedLinkBase):
     created_at: datetime
 
 
+class GradeAnswerRequest(BaseModel):
+    question: str
+    reference_answer: str
+    student_answer: str
+
+
+class GradeAnswerResponse(BaseModel):
+    correct: bool
+    feedback: str
+
+
 class StatusEvent(BaseModel):
     type: Literal["status"] = "status"
     message: str
