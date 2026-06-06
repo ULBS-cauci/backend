@@ -185,12 +185,8 @@ async def regenerate(
     current_user: User = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ):
-    conversation = await service.get_conversation_for_user(
-        conversation_id=conversation_id, user_id=current_user.id
-    )
-    if not conversation:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-
+    # Ownership is enforced inside regenerate_stream() (it can't be bypassed by other
+    # callers); an unauthorized/unknown conversation surfaces there as an SSE error event.
     async def event_stream():
         try:
             async for chunk in service.regenerate_stream(

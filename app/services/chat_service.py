@@ -183,8 +183,12 @@ class ChatService:
                 search_query, collection_name=QDRANT_MATERIALS_COLLECTION
             )
 
+        # When attachments are present we only FLUSH the user message so it stays uncommitted
+        # until linking succeeds; _link_attachments_to_message then commits both together (and
+        # rolls back the flushed message on failure), keeping message + attachments atomic.
+        # With no attachments there is nothing to link, so commit the message directly.
         user_message = await self._persist_message(
-            conversation_id, MessageSender.USER, query
+            conversation_id, MessageSender.USER, query, flush_only=bool(attachment_ids)
         )
         if attachment_ids:
             await self._link_attachments_to_message(
