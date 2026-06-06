@@ -152,6 +152,7 @@ class ChatService:
         if not history:
             conversation = await self.db_session.get(Conversation, conversation_id)
             conversation.title = await self._generate_title(query)
+            self.db_session.add(conversation)
 
         attachment_texts: List[str] = []
         if attachment_ids:
