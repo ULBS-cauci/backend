@@ -1,7 +1,6 @@
 import io
 import json
 import uuid
-from pathlib import Path
 from typing import List
 from urllib.parse import quote
 
@@ -16,7 +15,11 @@ from app.api.dependencies import (
     get_object_storage_client,
 )
 from app.core.config import MINIO_ATTACHMENTS_BUCKET
-from app.core.helpers import build_attachment_object_key
+from app.core.helpers import (
+    CONTENT_TYPE_BY_EXTENSION,
+    build_attachment_object_key,
+    content_type_for_filename,
+)
 from app.data_access.interfaces.object_storage import ObjectStorageInterface
 from app.schemas.chat_schemas import (
     Attachment,
@@ -34,15 +37,6 @@ from app.services.chat_service import ChatService
 router = APIRouter()
 
 MAX_ATTACHMENT_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
-
-_ATTACHMENT_MIME_TYPES: dict[str, str] = {
-    "pdf": "application/pdf",
-    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    "png": "image/png",
-    "jpg": "image/jpeg",
-    "jpeg": "image/jpeg",
-}
 
 
 @router.get("/", response_model=List[ConversationPublic])
@@ -114,15 +108,15 @@ async def upload_attachment(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
                 "Cannot determine file type — the file has no extension. "
-                f"Accepted: {', '.join(sorted(_ATTACHMENT_MIME_TYPES))}"
+                f"Accepted: {', '.join(sorted(CONTENT_TYPE_BY_EXTENSION))}"
             ),
         )
-    if suffix not in _ATTACHMENT_MIME_TYPES:
+    if suffix not in CONTENT_TYPE_BY_EXTENSION:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
                 f"Unsupported file type '.{suffix}'. "
-                f"Accepted: {', '.join(sorted(_ATTACHMENT_MIME_TYPES))}"
+                f"Accepted: {', '.join(sorted(CONTENT_TYPE_BY_EXTENSION))}"
             ),
         )
     filename = filename or f"attachment.{suffix}"
@@ -146,7 +140,7 @@ async def upload_attachment(
     object_key = build_attachment_object_key(current_user.id, attachment_id, filename)
 
     await object_storage.upload_file(
-        MINIO_ATTACHMENTS_BUCKET, object_key, content, _ATTACHMENT_MIME_TYPES[suffix]
+        MINIO_ATTACHMENTS_BUCKET, object_key, content, CONTENT_TYPE_BY_EXTENSION[suffix]
     )
 
     try:
@@ -198,8 +192,7 @@ async def download_attachment(
     headers = {
         "Content-Disposition": f'inline; filename="{encoded_name}"; filename*=UTF-8\'\'{encoded_name}'
     }
-    suffix = Path(attachment.file_name).suffix.lstrip(".").lower()
-    media_type = _ATTACHMENT_MIME_TYPES.get(suffix, "application/octet-stream")
+    media_type = content_type_for_filename(attachment.file_name)
     return StreamingResponse(io.BytesIO(data), media_type=media_type, headers=headers)
 
 
