@@ -1,6 +1,5 @@
 import asyncio
 import uuid
-from dataclasses import dataclass
 from typing import AsyncIterator, List, Optional
 from sqlmodel import select, desc, asc, update
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -27,11 +26,9 @@ from app.schemas.chat_schemas import (
     StatusEvent,
     StreamEvent,
 )
-from app.schemas.course_schemas import Course
 from app.schemas.knowledge_schemas import Material
 from app.schemas.source_schemas import SourceReference, SourcesEvent
 from app.schemas.llm_schemas import ChatMessage, MessageRole
-from app.schemas.vector_schemas import SearchResult
 from app.schemas.admin_schemas import SystemPrompt
 from app.schemas.user_schemas import UserSetting
 from app.data_access.interfaces.vector_db import VectorDBInterface
@@ -78,12 +75,6 @@ MAX_ATTACHMENT_CHARS = 10_000
 MAX_TOTAL_ATTACHMENT_CHARS = 30_000
 
 
-@dataclass
-class CourseInfo:
-    id: uuid.UUID
-    title: str
-
-
 class ChatService:
     def __init__(
         self,
@@ -96,9 +87,6 @@ class ChatService:
         db_session: AsyncSession,
         object_storage: ObjectStorageInterface,
         document_converter: DocumentConverter,
-        context_routing_enabled: bool = True,
-        context_routing_top_k: int = 20,
-        context_routing_delta: float = 0.10,
     ):
         self.vector_db = vector_db
         self.embedding_client = embedding_client
@@ -109,9 +97,6 @@ class ChatService:
         self.db_session = db_session
         self.object_storage = object_storage
         self._document_converter = document_converter
-        self.context_routing_enabled = context_routing_enabled
-        self.context_routing_top_k = context_routing_top_k
-        self.context_routing_delta = context_routing_delta
 
     async def create_conversation(
         self, user_id: uuid.UUID, course_id: Optional[uuid.UUID] = None
@@ -767,8 +752,20 @@ class ChatService:
             )
             keyword_results = []
 
-        fused = rrf_fuse(semantic_results, keyword_results, limit=limit * 2)
-        reranked = await self.reranker.rerank(query, fused, top_n=limit)
+        fused = rrf_fuse(semantic_results, keyword_results, limit=limit * 4)
+
+        # Deduplicate by exact text before reranking so that a document uploaded
+        # multiple times cannot crowd out other sources by flooding the candidate pool
+        # with identical chunks at different Qdrant IDs.
+        seen_texts: set[str] = set()
+        deduped = []
+        for result in fused:
+            text_key = result.chunk.text.strip()
+            if text_key not in seen_texts:
+                seen_texts.add(text_key)
+                deduped.append(result)
+
+        reranked = await self.reranker.rerank(query, deduped, top_n=limit)
         top_score = reranked[0].score if reranked else 0.0
         above_threshold = [res for res in reranked if res.score >= self.score_threshold]
         if not above_threshold:
@@ -781,100 +778,13 @@ class ChatService:
         sources = await self._resolve_sources(above_threshold)
         return context, sources
 
-    async def _detect_course_mismatch(
-        self,
-        query: str,
-        current_course_id: str,
-    ) -> tuple[Optional[CourseInfo], List[SearchResult]]:
-        """Unfiltered hybrid probe to detect whether the query belongs to a different course.
-
-        Runs Dense + Sparse + RRF globally (no course filter), groups results by course_id,
-        and triggers a switch prompt when the dominant course differs from the current one
-        by more than context_routing_delta in aggregate RRF score.
-
-        Returns (CourseInfo, fused_chunks).  CourseInfo is non-None only when a mismatch is
-        detected.  fused_chunks is always returned so the caller can reuse it to skip a
-        second Qdrant round-trip on the happy path.
-        """
-        probe_limit = self.context_routing_top_k
-        query_vector, sparse_query = await asyncio.gather(
-            self.embedding_client.embed_text(query),
-            self.sparse_encoder.encode_query(query),
-        )
-
-        semantic_results, keyword_results = await asyncio.gather(
-            self.vector_db.search(QDRANT_MATERIALS_COLLECTION, query_vector, limit=probe_limit),
-            self.vector_db.search_sparse(QDRANT_MATERIALS_COLLECTION, sparse_query, limit=probe_limit),
-            return_exceptions=True,
-        )
-        if isinstance(semantic_results, Exception):
-            raise semantic_results
-        if isinstance(keyword_results, Exception):
-            keyword_results = []
-
-        fused = rrf_fuse(semantic_results, keyword_results, limit=probe_limit)
-
-        if not fused:
-            return None, []
-
-        course_scores: dict[str, float] = {}
-        course_counts: dict[str, int] = {}
-        for result in fused:
-            cid = result.chunk.metadata.get("course_id", "")
-            if cid:
-                course_scores[cid] = course_scores.get(cid, 0.0) + result.score
-                course_counts[cid] = course_counts.get(cid, 0) + 1
-
-        if not course_scores:
-            return None, fused
-
-        course_avg: dict[str, float] = {
-            cid: course_scores[cid] / course_counts[cid] for cid in course_scores
-        }
-
-        logger.info(
-            "[routing] fused=%d chunks, course_avg=%s, current_course=%s",
-            len(fused),
-            {k: f"{v:.5f}" for k, v in course_avg.items()},
-            current_course_id,
-        )
-
-        dominant_course_id = max(course_avg, key=lambda k: course_avg[k])
-        if dominant_course_id == current_course_id:
-            logger.info("[routing] dominant == current → no switch")
-            return None, fused
-
-        dominant_avg = course_avg[dominant_course_id]
-        current_avg = course_avg.get(current_course_id, 0.0)
-
-        logger.info(
-            "[routing] dominant=%s avg=%.5f, current avg=%.5f, delta=%.2f, threshold=%.5f",
-            dominant_course_id, dominant_avg, current_avg,
-            self.context_routing_delta,
-            current_avg * (1.0 + self.context_routing_delta),
-        )
-
-        if current_avg > 0.0 and dominant_avg < current_avg * (1.0 + self.context_routing_delta):
-            logger.info("[routing] delta too small → no switch")
-            return None, fused
-
-        try:
-            course = await self.db_session.get(Course, uuid.UUID(dominant_course_id))
-            if course is None:
-                logger.warning("[routing] dominant course %s not found in DB", dominant_course_id)
-                return None, fused
-            return CourseInfo(id=course.id, title=course.title), fused
-        except Exception:
-            logger.warning("[routing] failed to fetch course %s", dominant_course_id, exc_info=True)
-            return None, fused
-
     async def _resolve_sources(self, results: list) -> list[SourceReference]:
         """Look up Material records for each unique object_storage_key in the result set."""
-        unique_keys = list({
+        unique_keys = list(dict.fromkeys(
             res.chunk.metadata["source"]
             for res in results
             if res.chunk.metadata.get("source")
-        })
+        ))
         if not unique_keys:
             return []
         stmt = select(Material).where(Material.object_storage_key.in_(unique_keys))

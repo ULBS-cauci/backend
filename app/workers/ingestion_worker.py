@@ -101,14 +101,14 @@ def create_document_chunks(
     Returns:
         List of DocumentChunk objects ready for embedding and upsert.
     """
-    metadata: dict = {"source": source}
-    if course_id:
-        metadata["course_id"] = course_id
     chunks = [
         DocumentChunk(
             id=uuid.uuid4(),
             text=chunk,
-            metadata=metadata,
+            metadata={
+                "source": source,
+                **({"course_id": course_id} if course_id else {}),
+            },
         )
         for chunk in text_chunks
     ]

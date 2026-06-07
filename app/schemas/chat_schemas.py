@@ -88,8 +88,6 @@ class MessageCreate(SQLModel):
         description="Optional FK to output_formats — specifies the desired response format.",
     )
     attachment_ids: List[uuid.UUID] = Field(default_factory=list)
-    force_current_course: bool = Field(default=False, description="Skip cross-course routing check for this message.")
-
 
 # ==========================================
 # ATTACHMENT
