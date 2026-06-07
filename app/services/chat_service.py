@@ -105,8 +105,7 @@ class ChatService:
             title="New Conversation_" + datetime.datetime.now().isoformat(),
         )
         self.db_session.add(conversation)
-        await self.db_session.commit()
-        await self.db_session.refresh(conversation)
+        await self.db_session.flush()
         return conversation
 
     async def get_user_conversations(self, user_id: uuid.UUID) -> List[Conversation]:
