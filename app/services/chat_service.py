@@ -282,7 +282,7 @@ class ChatService:
             )
 
             logger.info(
-                f"🔍 ROUTING: force_current? {force_current_course} | "
+                f"ROUTING: force_current? {force_current_course} | "
                 f"attachments? {bool(attachment_ids)} | conv_course_id: {conversation.course_id}"
             )
 
@@ -290,7 +290,7 @@ class ChatService:
                 if conversation.course_id:
                     # SCENARIO A: MISMATCH — user is scoped to a course but query matches another
                     if not context:
-                        logger.info("🔍 ROUTING: Primary search empty. Running global fallback...")
+                        logger.info("ROUTING: Primary search empty. Running global fallback...")
                         global_context, global_sources = await self._retrieve_relevant_chunks(
                             search_query,
                             collection_name=QDRANT_MATERIALS_COLLECTION,
@@ -302,7 +302,7 @@ class ChatService:
                             best_course_id = material.course_id if material else None
                             if best_course_id:
                                 if str(best_course_id) != str(conversation.course_id):
-                                    logger.info(f"🔍 ROUTING: Mismatch found! Suggesting switch to {best_course_id}")
+                                    logger.info(f"ROUTING: Mismatch found! Suggesting switch to {best_course_id}")
                                     detected_course = await self.db_session.get(Course, best_course_id)
                                     course_name = detected_course.title if detected_course else str(best_course_id)
                                     switch_user_msg = await self._persist_message(
@@ -319,7 +319,7 @@ class ChatService:
                                     # Self-healing: already on the correct course but primary search
                                     # failed (likely a missing course_id in the Qdrant payload).
                                     # Absorb the global chunks so the LLM can answer normally.
-                                    logger.info("🔍 ROUTING: Already on correct course — healing empty context with global fallback chunks.")
+                                    logger.info("ROUTING: Already on correct course — healing empty context with global fallback chunks.")
                                     context = global_context
                                     sources = global_sources
                 else:
@@ -328,7 +328,7 @@ class ChatService:
                         material = await self.db_session.get(Material, sources[0].material_id)
                         best_course_id = material.course_id if material else None
                         if best_course_id:
-                            logger.info(f"🔍 ROUTING: Discovery found! Suggesting lock-in to course {best_course_id}")
+                            logger.info(f"ROUTING: Discovery found! Suggesting lock-in to course {best_course_id}")
                             discovered_course = await self.db_session.get(Course, best_course_id)
                             course_name = discovered_course.title if discovered_course else str(best_course_id)
                             switch_user_msg = await self._persist_message(
@@ -368,7 +368,7 @@ class ChatService:
         # came up empty (e.g. the user clicked "Stay" on an off-topic question),
         # skip the LLM and return a polite refusal immediately.
         if conversation.course_id and not context and not attachment_texts:
-            logger.info("🔍 ROUTING: Context empty for scoped course. Short-circuiting LLM call.")
+            logger.info("ROUTING: Context empty for scoped course. Short-circuiting LLM call.")
             refusal_message = (
                 "Această întrebare nu pare să aibă legătură cu materialele cursului selectat. "
                 "Te rog să pui o întrebare relevantă pentru acest curs."
@@ -838,7 +838,7 @@ class ChatService:
         limit: int = 5,
         course_id: Optional[str] = None,
     ) -> tuple[str, list[SourceReference]]:
-        logger.info(f"🔍 DEBUG: Active retrieval filter - course_id: {course_id} | query: {query}")
+        logger.info(f"DEBUG: Active retrieval filter - course_id: {course_id} | query: {query}")
 
         query_vector, sparse_query = await asyncio.gather(
             self.embedding_client.embed_text(query),
