@@ -26,6 +26,8 @@ from app.schemas.chat_schemas import (
     StatusEvent,
     StreamEvent,
 )
+from app.schemas.knowledge_schemas import Material
+from app.schemas.source_schemas import SourceReference, SourcesEvent
 from app.schemas.llm_schemas import ChatMessage, MessageRole
 from app.schemas.admin_schemas import SystemPrompt
 from app.schemas.user_schemas import UserSetting
@@ -33,6 +35,7 @@ from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
 from app.data_access.interfaces.reranker import RerankerInterface
+from app.schemas.vector_schemas import SearchResult
 from docling.document_converter import DocumentConverter
 from app.workers.ingestion_worker import extract_text_with_docling
 
@@ -41,8 +44,11 @@ from app.core.config import MINIO_ATTACHMENTS_BUCKET, QDRANT_MATERIALS_COLLECTIO
 
 TUTOR_SYSTEM_PROMPT = (
     "You are a university tutor for the AI Tutor platform. "
-    "Help students understand concepts clearly and concisely. "
-    "If you are not sure about something, say so. "
+    "You MUST answer students' questions ONLY from the course materials and excerpts "
+    "explicitly provided to you in this conversation. "
+    "Never use your general knowledge, training data, or any information not present in "
+    "the provided documents. If the provided materials do not contain enough information "
+    "to answer the question, say so clearly and do not attempt to answer. "
     "ALWAYS write your entire reply in the same language as the student's most recent "
     "message. If that message is in Romanian, answer in Romanian; if it is in English, "
     "answer in English; and so on. Never switch languages on your own."
@@ -100,7 +106,6 @@ class ChatService:
         )
         self.db_session.add(conversation)
         await self.db_session.flush()
-        await self.db_session.refresh(conversation)
         return conversation
 
     async def get_user_conversations(self, user_id: uuid.UUID) -> List[Conversation]:
@@ -223,15 +228,12 @@ class ChatService:
     ) -> AsyncIterator[StreamEvent]:
         attachment_ids = attachment_ids or []
         format_name = await self._resolve_output_format_name(output_format_id)
-        conversation_id = await self._get_or_create_conversation(
-            user_id, conversation_id, query
-        )
-        history = await self.get_conversation_messages(conversation_id)
+        conversation = await self._get_or_create_conversation(user_id, conversation_id, query)
+        history = await self.get_conversation_messages(conversation.id)
 
         # Only an LLM-generated title for the first turn that has real text; an
         # attachment-only opener keeps the placeholder title from _get_or_create_conversation.
         if not history and query.strip():
-            conversation = await self.db_session.get(Conversation, conversation_id)
             conversation.title = await self._generate_title(query)
             self.db_session.add(conversation)
 
@@ -245,12 +247,14 @@ class ChatService:
             )
 
         context = ""
+        sources: list[SourceReference] = []
         if query.strip():
             yield StatusEvent(message="Thinking about your question...")
             search_query = await self._condense_query(history, query)
             yield StatusEvent(message="Searching the knowledge base...")
-            context = await self._retrieve_relevant_chunks(
-                search_query, collection_name=QDRANT_MATERIALS_COLLECTION
+            context, sources = await self._retrieve_relevant_chunks(
+                search_query,
+                collection_name=QDRANT_MATERIALS_COLLECTION,
             )
 
         # When attachments are present we only FLUSH the user message so it stays uncommitted
@@ -258,20 +262,14 @@ class ChatService:
         # rolls back the flushed message on failure), keeping message + attachments atomic.
         # With no attachments there is nothing to link, so commit the message directly.
         user_message = await self._persist_message(
-            conversation_id, MessageSender.USER, query,
-            output_format_id=output_format_id, flush_only=bool(attachment_ids),
+            conversation.id, MessageSender.USER, query,
+            output_format_id=output_format_id,
+            flush_only=bool(attachment_ids),
         )
         if attachment_ids:
-            await self._link_attachments_to_message(
-                user_message.id, attachment_ids, user_id
-            )
+            await self._link_attachments_to_message(user_message.id, attachment_ids, user_id)
 
         predefined_prompt, custom_prompt = await self._resolve_user_prompts(user_id)
-        # With nothing relevant to ground an answer (no context, no attachments, no prior
-        # turns) we hard-refuse via the refusal-only prompt instead of trusting the softer
-        # guard prompt, which the model can override with general knowledge. When prior
-        # conversation exists the student may be asking to rephrase/translate it, so the
-        # full context messages (with the no-context guard) decide whether to answer.
         if not context and not attachment_texts and not history:
             messages = self._build_refusal_messages(query)
         else:
@@ -290,22 +288,23 @@ class ChatService:
 
         new_content = "".join(chunks)
         if not new_content.strip():
-            # Don't persist a blank AI turn; surface an error so the client can retry.
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="The model returned an empty response. Please try again.",
             )
         await self._persist_message(
-            conversation_id, MessageSender.AI, new_content,
+            conversation.id, MessageSender.AI, new_content,
             output_format_id=output_format_id,
+            sources=sources or None,
         )
+        if sources:
+            yield SourcesEvent(sources=sources)
 
     async def regenerate_stream(
         self,
         conversation_id: uuid.UUID,
         user_id: uuid.UUID,
     ) -> AsyncIterator[StreamEvent]:
-        # Defense in depth: don't rely solely on the router's ownership check.
         conversation = await self.get_conversation_for_user(conversation_id, user_id)
         if not conversation:
             raise HTTPException(
@@ -334,13 +333,9 @@ class ChatService:
 
         last_user_idx = next(i for i, m in enumerate(all_messages) if m.id == last_user_msg.id)
         context_history = all_messages[:last_user_idx]
-        # Any stray messages between the user turn and the AI answer we're regenerating
-        # (normally none) are orphans — delete them so the turn stays consistent.
         orphan_messages = all_messages[last_user_idx + 1:-1]
         query = last_user_msg.content
 
-        # Re-fetch every attachment linked to the original user prompt so the regenerated
-        # answer is grounded on the exact same files the student attached.
         attachment_texts: List[tuple[str, str]] = []
         attachments_stmt = select(Attachment).where(Attachment.message_id == last_user_msg.id)
         attachments_result = await self.db_session.exec(attachments_stmt)
@@ -352,17 +347,12 @@ class ChatService:
         yield StatusEvent(message="Thinking about your question...")
         search_query = await self._condense_query(context_history, query)
         yield StatusEvent(message="Searching the knowledge base...")
-        context = await self._retrieve_relevant_chunks(
+        context, sources = await self._retrieve_relevant_chunks(
             search_query, collection_name=QDRANT_MATERIALS_COLLECTION
         )
 
-        # Keep the regenerated answer consistent with the original turn's output format and
-        # the student's current style preferences.
         format_name = await self._resolve_output_format_name(target_ai_msg.output_format_id)
         predefined_prompt, custom_prompt = await self._resolve_user_prompts(user_id)
-        # Same policy as ask_stream: hard-refuse when there is nothing to ground an answer
-        # on (no context, no attachments, no earlier conversation), otherwise build the full
-        # context messages so an alternative answer / rephrase can be produced.
         if not context and not attachment_texts and not context_history:
             llm_messages = self._build_refusal_messages(query)
         else:
@@ -382,8 +372,6 @@ class ChatService:
 
         new_content = "".join(chunks)
         if not new_content.strip():
-            # The model produced nothing. Do NOT overwrite the previous answer — replacing a
-            # good response with an empty one would be irrecoverable data loss.
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="The model returned an empty response; the previous answer was kept.",
@@ -391,10 +379,8 @@ class ChatService:
 
         for orphan in orphan_messages:
             await self.db_session.delete(orphan)
-        # Update the answer in place (keep id + created_at) instead of delete-then-insert:
-        # the frontend keeps its message reference, ordering is stable, and two concurrent
-        # regenerations write the same row (last-writer-wins) rather than duplicating.
         target_ai_msg.content = new_content
+        target_ai_msg.sources = [s.model_dump(mode="json") for s in sources] if sources else None
         self.db_session.add(target_ai_msg)
         conversation.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(
             tzinfo=None
@@ -402,12 +388,15 @@ class ChatService:
         self.db_session.add(conversation)
         await self.db_session.commit()
 
+        if sources:
+            yield SourcesEvent(sources=sources)
+
     async def _get_or_create_conversation(
         self,
         user_id: uuid.UUID,
         conversation_id: Optional[uuid.UUID],
         query: str,
-    ) -> uuid.UUID:
+    ) -> Conversation:
         if not conversation_id:
             raw_title = query.strip()
             title = ((raw_title[:50] + "...") if len(raw_title) > 50 else raw_title) or "New Conversation"
@@ -415,7 +404,7 @@ class ChatService:
             self.db_session.add(conversation)
             await self.db_session.flush()
             await self.db_session.refresh(conversation)
-            return conversation.id
+            return conversation
 
         conversation = await self.get_conversation_for_user(conversation_id, user_id)
         if not conversation:
@@ -428,7 +417,7 @@ class ChatService:
         )
         self.db_session.add(conversation)
         await self.db_session.flush()
-        return conversation_id
+        return conversation
 
     async def _condense_query(self, history: List[Message], query: str) -> str:
         if not history:
@@ -550,7 +539,13 @@ class ChatService:
             messages.append(
                 ChatMessage(
                     role=MessageRole.SYSTEM,
-                    content="Here are some relevant documents from the university library that might help you answer the question:",
+                    content=(
+                        "The following excerpts were retrieved from the university course materials. "
+                        "Answer the student's question using ONLY the information in these excerpts. "
+                        "Do NOT use your general knowledge or any information outside of these excerpts. "
+                        "If the excerpts do not contain enough information to answer the question, "
+                        "say so explicitly and do not attempt to answer from memory."
+                    ),
                 )
             )
             messages.append(ChatMessage(role=MessageRole.SYSTEM, content=context))
@@ -637,9 +632,14 @@ class ChatService:
         *,
         output_format_id: Optional[uuid.UUID] = None,
         flush_only: bool = False,
+        sources: Optional[List[SourceReference]] = None,
     ) -> Message:
+        serialized_sources = [s.model_dump(mode="json") for s in sources] if sources else None
         message = Message(
-            conversation_id=conversation_id, sender=sender, content=content,
+            conversation_id=conversation_id,
+            sender=sender,
+            content=content,
+            sources=serialized_sources,
             output_format_id=output_format_id,
         )
         self.db_session.add(message)
@@ -720,14 +720,16 @@ class ChatService:
         query: str,
         collection_name: str,
         limit: int = 5,
-    ) -> str:
+    ) -> tuple[str, list[SourceReference]]:
         query_vector, sparse_query = await asyncio.gather(
             self.embedding_client.embed_text(query),
             self.sparse_encoder.encode_query(query),
         )
 
         semantic_results, keyword_results = await asyncio.gather(
-            self.vector_db.search(collection_name, query_vector, limit=limit * 4),
+            self.vector_db.search(
+                collection_name, query_vector, limit=limit * 4
+            ),
             self.vector_db.search_sparse(
                 collection_name, sparse_query, limit=limit * 4
             ),
@@ -743,8 +745,20 @@ class ChatService:
             )
             keyword_results = []
 
-        fused = rrf_fuse(semantic_results, keyword_results, limit=limit * 2)
-        reranked = await self.reranker.rerank(query, fused, top_n=limit)
+        fused = rrf_fuse(semantic_results, keyword_results, limit=limit * 4)
+
+        # Deduplicate by exact text before reranking so that a document uploaded
+        # multiple times cannot crowd out other sources by flooding the candidate pool
+        # with identical chunks at different Qdrant IDs.
+        seen_texts: set[str] = set()
+        deduped = []
+        for result in fused:
+            text_key = result.chunk.text.strip()
+            if text_key not in seen_texts:
+                seen_texts.add(text_key)
+                deduped.append(result)
+
+        reranked = await self.reranker.rerank(query, deduped, top_n=limit)
         top_score = reranked[0].score if reranked else 0.0
         above_threshold = [res for res in reranked if res.score >= self.score_threshold]
         if not above_threshold:
@@ -752,5 +766,36 @@ class ChatService:
                 f"No chunks above threshold {self.score_threshold} "
                 f"(best reranker score={top_score:.4f}) for query '{query}'"
             )
-            return ""
-        return "\n---\n".join(res.chunk.text for res in above_threshold)
+            return "", []
+        context = "\n---\n".join(res.chunk.text for res in above_threshold)
+        sources = await self._resolve_sources(above_threshold)
+        return context, sources
+
+    async def _resolve_sources(self, results: list[SearchResult]) -> list[SourceReference]:
+        """Look up Material records for each unique object_storage_key in the result set."""
+        unique_keys = list(dict.fromkeys(
+            res.chunk.metadata["source"]
+            for res in results
+            if res.chunk.metadata.get("source")
+        ))
+        if not unique_keys:
+            return []
+        stmt = select(Material).where(Material.object_storage_key.in_(unique_keys))
+        db_result = await self.db_session.exec(stmt)
+        materials = db_result.all()
+        key_to_mat = {m.object_storage_key: m for m in materials}
+        # Iterate in retrieval-rank order (unique_keys preserves RRF rank).
+        # Secondary dedup by file_name: the same file uploaded multiple times creates
+        # multiple Material rows with different storage keys but identical display names.
+        seen: set[str] = set()
+        refs: list[SourceReference] = []
+        for key in unique_keys:
+            mat = key_to_mat.get(key)
+            if mat and mat.file_name not in seen:
+                seen.add(mat.file_name)
+                refs.append(SourceReference(
+                    material_id=mat.id,
+                    file_name=mat.file_name,
+                    download_url=f"/api/v1/courses/{mat.course_id}/materials/{mat.id}/download",
+                ))
+        return refs

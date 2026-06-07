@@ -81,15 +81,8 @@ class VectorDBInterface(ABC):
             limit (int): Maximum number of results to return. Defaults to 5.
 
         Returns:
-            List[SearchResult]: A list of domain models containing the chunk data and its relevance 
+            List[SearchResult]: A list of domain models containing the chunk data and its relevance
             score, strictly sorted from highest relevance to lowest relevance.
-        """
-        pass
-
-    @abstractmethod
-    async def delete_chunks_by_source(self, collection_name: str, source: str) -> None:
-        """
-        Deletes all chunks whose metadata.source matches the given source string.
         """
         pass
 
