@@ -111,6 +111,10 @@ class CourseService:
                 await self.object_storage.delete_file(
                     MINIO_MATERIALS_BUCKET, material.object_storage_key
                 )
+                # Drop the cached PDF preview (no-op if it was never generated).
+                await self.object_storage.delete_file(
+                    MINIO_MATERIALS_BUCKET, f"previews/{material.id}.pdf"
+                )
             if material.vector_namespace:
                 if material.object_storage_key:
                     await self.vector_db.delete_chunks_by_source(

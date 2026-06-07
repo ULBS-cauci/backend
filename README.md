@@ -9,6 +9,10 @@ This folder contains the Python backend setup and dependency workflow.
 - Python 3.10+ (recommended)
 - pip (comes with Python)
 - Docker + Docker Compose (for Qdrant, MinIO, PostgreSQL)
+- LibreOffice (headless) — converts DOCX/PPTX to PDF for inline file preview.
+  Install with `sudo apt-get install -y libreoffice-writer libreoffice-impress libreoffice-core`
+  (the `soffice` binary must be on `PATH`). Without it, DOCX/PPTX previews
+  gracefully fall back to a download link instead of rendering inline.
 
 ### Install Docker
 

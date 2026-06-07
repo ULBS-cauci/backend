@@ -45,6 +45,7 @@ from app.data_access.interfaces.text_splitter import TextSplitterInterface
 from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.schemas.knowledge_schemas import Material, MaterialPublic
 from app.workers.ingestion_worker import create_document_chunks, extract_text_with_docling
+from app.services.preview_service import PreviewBody, get_previewable
 
 logger = logging.getLogger(__name__)
 
@@ -321,3 +322,29 @@ class FileService:
             MINIO_MATERIALS_BUCKET, material.object_storage_key
         )
         return material.file_name, stream
+
+    async def get_material_preview(
+        self, course_id: uuid.UUID, material_id: uuid.UUID
+    ) -> tuple[str, str, PreviewBody] | None:
+        """Returns (filename, media_type, body) for an inline preview, or None if not found.
+
+        Office files (docx/pptx) are converted to PDF (cached in storage); pdf/images
+        are streamed as-is. Verifies the material belongs to the given course.
+        """
+        result = await self.db.exec(
+            select(Material).where(
+                Material.id == material_id,
+                Material.course_id == course_id,
+            )
+        )
+        material = result.one_or_none()
+        if material is None or not material.object_storage_key:
+            return None
+        media_type, body = await get_previewable(
+            self.object_storage,
+            MINIO_MATERIALS_BUCKET,
+            material.object_storage_key,
+            material.file_name,
+            cache_key=f"previews/{material.id}.pdf",
+        )
+        return material.file_name, media_type, body

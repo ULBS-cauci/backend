@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 
 from app.api.dependencies import get_course_service, get_current_user, get_file_service
-from app.core.helpers import content_type_for_filename
 from app.schemas.course_schemas import CourseCreate, CourseDisplay, CourseUpdate
 from app.schemas.knowledge_schemas import MaterialPublic
 from app.schemas.user_schemas import User
@@ -72,13 +71,13 @@ async def preview_course_material(
     material_id: uuid.UUID,
     file_service: FileService = Depends(get_file_service),
 ) -> StreamingResponse:
-    result = await file_service.get_material_stream(course_id, material_id)
+    result = await file_service.get_material_preview(course_id, material_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Material not found")
-    filename, stream = result
+    filename, media_type, body = result
     return StreamingResponse(
-        stream,
-        media_type=content_type_for_filename(filename),
+        body,
+        media_type=media_type,
         headers={
             "Content-Disposition": f'inline; filename="{filename}"',
             "Cache-Control": "private, max-age=3600",
