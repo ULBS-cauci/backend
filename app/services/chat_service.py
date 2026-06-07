@@ -18,6 +18,7 @@ from app.schemas.chat_schemas import (
     Attachment,
     AttachmentPublic,
     ChunkEvent,
+    ContextSwitchRequestEvent,
     Conversation,
     Message,
     MessagePublic,
@@ -26,6 +27,7 @@ from app.schemas.chat_schemas import (
     StatusEvent,
     StreamEvent,
 )
+from app.schemas.course_schemas import Course
 from app.schemas.knowledge_schemas import Material
 from app.schemas.source_schemas import SourceReference, SourcesEvent
 from app.schemas.llm_schemas import ChatMessage, MessageRole
@@ -46,8 +48,13 @@ TUTOR_SYSTEM_PROMPT = (
     "You MUST answer students' questions ONLY from the course materials and excerpts "
     "explicitly provided to you in this conversation. "
     "Never use your general knowledge, training data, or any information not present in "
-    "the provided documents. If the provided materials do not contain enough information "
-    "to answer the question, say so clearly and do not attempt to answer. "
+    "the provided documents. "
+    "FLEXIBILITY RULE: If the student asks for a concept definition or explanation and "
+    "the provided excerpts contain practical examples, solved problems, worked exercises, "
+    "or case studies related to that concept — even without a direct textbook definition — "
+    "you MUST use those materials to explain the concept. Derive the explanation from the "
+    "examples; do NOT refuse simply because a formal definition is absent. "
+    "Only refuse if the excerpts are entirely unrelated to the question. "
     "ALWAYS write your entire reply in the same language as the student's most recent "
     "message. If that message is in Romanian, answer in Romanian; if it is in English, "
     "answer in English; and so on. Never switch languages on your own."
@@ -98,9 +105,14 @@ class ChatService:
         self.object_storage = object_storage
         self._document_converter = document_converter
 
-    async def create_conversation(self, user_id: uuid.UUID) -> Conversation:
+    async def create_conversation(
+        self,
+        user_id: uuid.UUID,
+        course_id: Optional[uuid.UUID] = None,
+    ) -> Conversation:
         conversation = Conversation(
             user_id=user_id,
+            course_id=course_id,
             title="New Conversation_" + datetime.datetime.now().isoformat(),
         )
         self.db_session.add(conversation)
@@ -225,11 +237,21 @@ class ChatService:
         conversation_id: Optional[uuid.UUID] = None,
         attachment_ids: Optional[List[uuid.UUID]] = None,
         output_format_id: Optional[uuid.UUID] = None,
+        course_id: Optional[uuid.UUID] = None,
+        force_current_course: bool = False,
+        existing_message_id: Optional[uuid.UUID] = None,
     ) -> AsyncIterator[StreamEvent]:
         attachment_ids = attachment_ids or []
         format_name = await self._resolve_output_format_name(output_format_id)
         conversation = await self._get_or_create_conversation(user_id, conversation_id, query)
         history = await self.get_conversation_messages(conversation.id)
+
+        # Persist the course binding on the conversation so that every subsequent
+        # message — including regenerations — retrieves from the correct course.
+        # We only write if the value actually changes to avoid unnecessary dirty marks.
+        if course_id and conversation.course_id != course_id:
+            conversation.course_id = course_id
+            self.db_session.add(conversation)
 
         # Only an LLM-generated title for the first turn that has real text; an
         # attachment-only opener keeps the placeholder title from _get_or_create_conversation.
@@ -255,19 +277,107 @@ class ChatService:
             context, sources = await self._retrieve_relevant_chunks(
                 search_query,
                 collection_name=QDRANT_MATERIALS_COLLECTION,
+                course_id=str(conversation.course_id) if conversation.course_id else None,
             )
+
+            logger.info(
+                f"🔍 ROUTING: force_current? {force_current_course} | "
+                f"attachments? {bool(attachment_ids)} | conv_course_id: {conversation.course_id}"
+            )
+
+            if not force_current_course and not attachment_ids:
+                if conversation.course_id:
+                    # SCENARIO A: MISMATCH — user is scoped to a course but query matches another
+                    if not context:
+                        logger.info("🔍 ROUTING: Primary search empty. Running global fallback...")
+                        global_context, global_sources = await self._retrieve_relevant_chunks(
+                            search_query,
+                            collection_name=QDRANT_MATERIALS_COLLECTION,
+                            course_id=None,
+                            limit=4,  # cross-course search is noisier; slightly wider pool for routing accuracy
+                        )
+                        if global_context and global_sources:
+                            material = await self.db_session.get(Material, global_sources[0].material_id)
+                            best_course_id = material.course_id if material else None
+                            if best_course_id:
+                                if str(best_course_id) != str(conversation.course_id):
+                                    logger.info(f"🔍 ROUTING: Mismatch found! Suggesting switch to {best_course_id}")
+                                    detected_course = await self.db_session.get(Course, best_course_id)
+                                    course_name = detected_course.title if detected_course else str(best_course_id)
+                                    switch_user_msg = await self._persist_message(
+                                        conversation.id, MessageSender.USER, query,
+                                        output_format_id=output_format_id,
+                                    )
+                                    yield ContextSwitchRequestEvent(
+                                        detected_course_id=str(best_course_id),
+                                        detected_course_name=course_name,
+                                        user_message_id=str(switch_user_msg.id),
+                                    )
+                                    return
+                                else:
+                                    # Self-healing: already on the correct course but primary search
+                                    # failed (likely a missing course_id in the Qdrant payload).
+                                    # Absorb the global chunks so the LLM can answer normally.
+                                    logger.info("🔍 ROUTING: Already on correct course — healing empty context with global fallback chunks.")
+                                    context = global_context
+                                    sources = global_sources
+                else:
+                    # SCENARIO B: DISCOVERY — user is in "All courses", suggest locking in
+                    if context and sources:
+                        material = await self.db_session.get(Material, sources[0].material_id)
+                        best_course_id = material.course_id if material else None
+                        if best_course_id:
+                            logger.info(f"🔍 ROUTING: Discovery found! Suggesting lock-in to course {best_course_id}")
+                            discovered_course = await self.db_session.get(Course, best_course_id)
+                            course_name = discovered_course.title if discovered_course else str(best_course_id)
+                            switch_user_msg = await self._persist_message(
+                                conversation.id, MessageSender.USER, query,
+                                output_format_id=output_format_id,
+                            )
+                            yield ContextSwitchRequestEvent(
+                                detected_course_id=str(best_course_id),
+                                detected_course_name=course_name,
+                                user_message_id=str(switch_user_msg.id),
+                            )
+                            return
 
         # When attachments are present we only FLUSH the user message so it stays uncommitted
         # until linking succeeds; _link_attachments_to_message then commits both together (and
         # rolls back the flushed message on failure), keeping message + attachments atomic.
         # With no attachments there is nothing to link, so commit the message directly.
-        user_message = await self._persist_message(
-            conversation.id, MessageSender.USER, query,
-            output_format_id=output_format_id,
-            flush_only=bool(attachment_ids),
-        )
-        if attachment_ids:
-            await self._link_attachments_to_message(user_message.id, attachment_ids, user_id)
+        # "Stay on current course" re-submissions supply existing_message_id to skip creating
+        # a duplicate user message after the routing banner was shown.
+        if existing_message_id:
+            user_message = await self.db_session.get(Message, existing_message_id)
+            if not user_message:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Message not found",
+                )
+        else:
+            user_message = await self._persist_message(
+                conversation.id, MessageSender.USER, query,
+                output_format_id=output_format_id,
+                flush_only=bool(attachment_ids),
+            )
+            if attachment_ids:
+                await self._link_attachments_to_message(user_message.id, attachment_ids, user_id)
+
+        # Short-circuit: when the conversation is scoped to a course but retrieval
+        # came up empty (e.g. the user clicked "Stay" on an off-topic question),
+        # skip the LLM and return a polite refusal immediately.
+        if conversation.course_id and not context and not attachment_texts:
+            logger.info("🔍 ROUTING: Context empty for scoped course. Short-circuiting LLM call.")
+            refusal_message = (
+                "Această întrebare nu pare să aibă legătură cu materialele cursului selectat. "
+                "Te rog să pui o întrebare relevantă pentru acest curs."
+            )
+            yield ChunkEvent(content=refusal_message)
+            await self._persist_message(
+                conversation.id, MessageSender.AI, refusal_message,
+                output_format_id=output_format_id,
+            )
+            return
 
         predefined_prompt, custom_prompt = await self._resolve_user_prompts(user_id)
         if not context and not attachment_texts and not history:
@@ -348,7 +458,9 @@ class ChatService:
         search_query = await self._condense_query(context_history, query)
         yield StatusEvent(message="Searching the knowledge base...")
         context, sources = await self._retrieve_relevant_chunks(
-            search_query, collection_name=QDRANT_MATERIALS_COLLECTION
+            search_query,
+            collection_name=QDRANT_MATERIALS_COLLECTION,
+            course_id=str(conversation.course_id) if conversation.course_id else None,
         )
 
         format_name = await self._resolve_output_format_name(target_ai_msg.output_format_id)
@@ -543,8 +655,11 @@ class ChatService:
                         "The following excerpts were retrieved from the university course materials. "
                         "Answer the student's question using ONLY the information in these excerpts. "
                         "Do NOT use your general knowledge or any information outside of these excerpts. "
-                        "If the excerpts do not contain enough information to answer the question, "
-                        "say so explicitly and do not attempt to answer from memory."
+                        "IMPORTANT: If the student asks for a concept definition or explanation and "
+                        "the excerpts contain practical examples, solved problems, worked exercises, "
+                        "or case studies related to that concept, you MUST use those to construct "
+                        "the explanation — a direct textbook definition is NOT required. "
+                        "Only refuse if the excerpts are completely unrelated to the question."
                     ),
                 )
             )
@@ -720,18 +835,31 @@ class ChatService:
         query: str,
         collection_name: str,
         limit: int = 5,
+        course_id: Optional[str] = None,
     ) -> tuple[str, list[SourceReference]]:
+        logger.info(f"🔍 DEBUG: Active retrieval filter - course_id: {course_id} | query: {query}")
+
         query_vector, sparse_query = await asyncio.gather(
             self.embedding_client.embed_text(query),
             self.sparse_encoder.encode_query(query),
         )
 
+        # Scoped search (course_id set): tight pool — the filter already narrows the
+        # candidate space, so fewer candidates are needed before reranking.
+        # Global search (course_id=None): wider pool — cross-course + cross-lingual
+        # queries produce lower initial vector scores, so relevant chunks can rank
+        # outside a tight top-N cut. A cap of 25 still bounds cross-encoder cost.
+        if course_id is not None:
+            pre_rerank_cap = min(limit * 2, 12)
+        else:
+            pre_rerank_cap = min(limit * 4, 25)
+
         semantic_results, keyword_results = await asyncio.gather(
             self.vector_db.search(
-                collection_name, query_vector, limit=limit * 4
+                collection_name, query_vector, limit=pre_rerank_cap, course_id=course_id
             ),
             self.vector_db.search_sparse(
-                collection_name, sparse_query, limit=limit * 4
+                collection_name, sparse_query, limit=pre_rerank_cap, course_id=course_id
             ),
             return_exceptions=True,
         )
@@ -745,7 +873,7 @@ class ChatService:
             )
             keyword_results = []
 
-        fused = rrf_fuse(semantic_results, keyword_results, limit=limit * 4)
+        fused = rrf_fuse(semantic_results, keyword_results, limit=pre_rerank_cap)
 
         # Deduplicate by exact text before reranking so that a document uploaded
         # multiple times cannot crowd out other sources by flooding the candidate pool

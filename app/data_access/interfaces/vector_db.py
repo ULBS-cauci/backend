@@ -51,6 +51,7 @@ class VectorDBInterface(ABC):
         collection_name: str,
         query_vector: List[float],
         limit: int = 5,
+        course_id: Optional[str] = None,
     ) -> List[SearchResult]:
         """
         Performs a dense (semantic) vector search.
@@ -71,6 +72,7 @@ class VectorDBInterface(ABC):
         collection_name: str,
         sparse_query: SparseVectorSchema,
         limit: int = 5,
+        course_id: Optional[str] = None,
     ) -> List[SearchResult]:
         """
         Performs a sparse (BM25 keyword) vector search.
