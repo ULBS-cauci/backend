@@ -291,9 +291,11 @@ class ChatService:
         # until linking succeeds; _link_attachments_to_message then commits both together (and
         # rolls back the flushed message on failure), keeping message + attachments atomic.
         # With no attachments there is nothing to link, so commit the message directly.
+        now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
         user_message = await self._persist_message(
             conversation_id, MessageSender.USER, query,
             output_format_id=output_format_id, flush_only=bool(attachment_ids),
+            created_at=now,
         )
         if attachment_ids:
             await self._link_attachments_to_message(
@@ -303,6 +305,7 @@ class ChatService:
         await self._persist_message(
             conversation_id, MessageSender.AI, new_content,
             output_format_id=output_format_id,
+            created_at=now + datetime.timedelta(microseconds=1000),
         )
 
     async def regenerate_stream(
@@ -642,11 +645,18 @@ class ChatService:
         *,
         output_format_id: Optional[uuid.UUID] = None,
         flush_only: bool = False,
+        created_at: Optional[datetime.datetime] = None,
     ) -> Message:
         message = Message(
             conversation_id=conversation_id, sender=sender, content=content,
             output_format_id=output_format_id,
         )
+        # The user turn and the AI turn are now persisted back-to-back after streaming, so
+        # their default created_at timestamps can collide. Ordering (get_conversation_messages)
+        # is purely created_at asc with no tiebreaker, so an explicit timestamp lets callers
+        # guarantee the user message sorts before its answer.
+        if created_at is not None:
+            message.created_at = created_at
         self.db_session.add(message)
         if flush_only:
             await self.db_session.flush()
