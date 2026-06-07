@@ -20,7 +20,6 @@ from app.core.helpers import (
     build_attachment_object_key,
     content_type_for_filename,
 )
-from app.services.preview_service import get_previewable
 from app.data_access.interfaces.object_storage import ObjectStorageInterface
 from app.schemas.chat_schemas import (
     Attachment,
@@ -195,46 +194,6 @@ async def download_attachment(
     }
     media_type = content_type_for_filename(attachment.file_name)
     return StreamingResponse(io.BytesIO(data), media_type=media_type, headers=headers)
-
-
-@router.get("/attachments/{attachment_id}/preview")
-async def preview_attachment(
-    attachment_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
-    object_storage: ObjectStorageInterface = Depends(get_object_storage_client),
-    db: AsyncSession = Depends(get_db_session),
-):
-    """Inline preview: docx/pptx are converted to PDF (cached), others served as-is."""
-    attachment = await db.get(Attachment, attachment_id)
-    if not attachment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found"
-        )
-    if attachment.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this attachment",
-        )
-
-    try:
-        media_type, body = await get_previewable(
-            object_storage,
-            MINIO_ATTACHMENTS_BUCKET,
-            attachment.object_storage_key,
-            attachment.file_name,
-            cache_key=f"previews/{attachment.id}.pdf",
-        )
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Attachment file is missing from storage",
-        )
-
-    encoded_name = quote(attachment.file_name)
-    headers = {
-        "Content-Disposition": f'inline; filename="{encoded_name}"; filename*=UTF-8\'\'{encoded_name}'
-    }
-    return StreamingResponse(body, media_type=media_type, headers=headers)
 
 
 @router.post("/{conversation_id}/regenerate")
