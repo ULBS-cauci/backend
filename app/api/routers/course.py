@@ -78,7 +78,9 @@ async def download_course_material(
     if result is None:
         raise HTTPException(status_code=404, detail="Material not found")
     file_name, content_type, stream = result
-    encoded = quote(file_name)
+    # Strip CR/LF to prevent response-splitting; safe="" ensures "/" is also percent-encoded.
+    safe_name = file_name.replace("\r", "").replace("\n", "")
+    encoded = quote(safe_name, safe="")
     headers = {
         "Content-Disposition": (
             f'attachment; filename="{encoded}"; filename*=UTF-8\'\'{encoded}'
