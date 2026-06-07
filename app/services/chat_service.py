@@ -291,6 +291,8 @@ class ChatService:
         # until linking succeeds; _link_attachments_to_message then commits both together (and
         # rolls back the flushed message on failure), keeping message + attachments atomic.
         # With no attachments there is nothing to link, so commit the message directly.
+        # The user and AI turns are created back-to-back, so explicit timestamps (user = now,
+        # AI = now + 1ms) keep them ordered (get_conversation_messages sorts by created_at).
         now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
         user_message = await self._persist_message(
             conversation_id, MessageSender.USER, query,
@@ -307,6 +309,108 @@ class ChatService:
             output_format_id=output_format_id,
             created_at=now + datetime.timedelta(microseconds=1000),
         )
+
+    async def regenerate_stream(
+        self,
+        conversation_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> AsyncIterator[StreamEvent]:
+        # Defense in depth: don't rely solely on the router's ownership check.
+        conversation = await self.get_conversation_for_user(conversation_id, user_id)
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found or unauthorized",
+            )
+
+        all_messages = await self.get_conversation_messages(conversation_id)
+
+        if not all_messages or all_messages[-1].sender != MessageSender.AI:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Last message is not an AI response; nothing to regenerate",
+            )
+        target_ai_msg = all_messages[-1]
+
+        last_user_msg = next(
+            (m for m in reversed(all_messages[:-1]) if m.sender == MessageSender.USER),
+            None,
+        )
+        if last_user_msg is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No user message found to regenerate from",
+            )
+
+        last_user_idx = next(i for i, m in enumerate(all_messages) if m.id == last_user_msg.id)
+        context_history = all_messages[:last_user_idx]
+        # Any stray messages between the user turn and the AI answer we're regenerating
+        # (normally none) are orphans — delete them so the turn stays consistent.
+        orphan_messages = all_messages[last_user_idx + 1:-1]
+        query = last_user_msg.content
+
+        # Re-fetch every attachment linked to the original user prompt so the regenerated
+        # answer is grounded on the exact same files the student attached.
+        attachment_texts: List[tuple[str, str]] = []
+        attachments_stmt = select(Attachment).where(Attachment.message_id == last_user_msg.id)
+        attachments_result = await self.db_session.exec(attachments_stmt)
+        linked_attachment_ids = [a.id for a in attachments_result.all()]
+        if linked_attachment_ids:
+            yield StatusEvent(message="Reading your attachments...")
+            attachment_texts = await self._fetch_attachment_texts(linked_attachment_ids, user_id)
+
+        yield StatusEvent(message="Thinking about your question...")
+        search_query = await self._condense_query(context_history, query)
+        yield StatusEvent(message="Searching the knowledge base...")
+        context = await self._retrieve_relevant_chunks(
+            search_query, collection_name=QDRANT_MATERIALS_COLLECTION
+        )
+
+        # Keep the regenerated answer consistent with the original turn's output format and
+        # the student's current style preferences.
+        format_name = await self._resolve_output_format_name(target_ai_msg.output_format_id)
+        predefined_prompt, custom_prompt = await self._resolve_user_prompts(user_id)
+        # Same policy as ask_stream: hard-refuse when there is nothing to ground an answer
+        # on (no context, no attachments, no earlier conversation), otherwise build the full
+        # context messages so an alternative answer / rephrase can be produced.
+        if not context and not attachment_texts and not context_history:
+            llm_messages = self._build_refusal_messages(query)
+        else:
+            llm_messages = self._build_context_messages(
+                context_history, context, query, attachment_texts,
+                output_format_name=format_name,
+                predefined_prompt=predefined_prompt,
+                custom_prompt=custom_prompt,
+                regenerate=True,
+            )
+
+        yield StatusEvent(message="Generating answer...")
+        chunks: list[str] = []
+        async for chunk in self.llm_client.stream(llm_messages):
+            chunks.append(chunk)
+            yield ChunkEvent(content=chunk)
+
+        new_content = "".join(chunks)
+        if not new_content.strip():
+            # The model produced nothing. Do NOT overwrite the previous answer — replacing a
+            # good response with an empty one would be irrecoverable data loss.
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="The model returned an empty response; the previous answer was kept.",
+            )
+
+        for orphan in orphan_messages:
+            await self.db_session.delete(orphan)
+        # Update the answer in place (keep id + created_at) instead of delete-then-insert:
+        # the frontend keeps its message reference, ordering is stable, and two concurrent
+        # regenerations write the same row (last-writer-wins) rather than duplicating.
+        target_ai_msg.content = new_content
+        self.db_session.add(target_ai_msg)
+        conversation.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(
+            tzinfo=None
+        )
+        self.db_session.add(conversation)
+        await self.db_session.commit()
 
     async def regenerate_stream(
         self,
