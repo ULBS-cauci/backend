@@ -37,6 +37,7 @@ from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
 from app.data_access.interfaces.reranker import RerankerInterface
+from app.schemas.vector_schemas import SearchResult
 from docling.document_converter import DocumentConverter
 from app.workers.ingestion_worker import extract_text_with_docling
 
@@ -899,7 +900,7 @@ class ChatService:
         sources = await self._resolve_sources(above_threshold)
         return context, sources
 
-    async def _resolve_sources(self, results: list) -> list[SourceReference]:
+    async def _resolve_sources(self, results: list[SearchResult]) -> list[SourceReference]:
         """Look up Material records for each unique object_storage_key in the result set."""
         unique_keys = list(dict.fromkeys(
             res.chunk.metadata["source"]
