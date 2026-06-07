@@ -77,20 +77,6 @@ class ExecutorSettings(_Base):
     INGESTION_MAX_WORKERS: int = 4
 
 
-class ContextRoutingSettings(_Base):
-    """Controls the cross-course context mismatch detection in the RAG chat pipeline."""
-    CONTEXT_ROUTING_ENABLED: bool = True
-    CONTEXT_ROUTING_TOP_K: int = 20
-    # Relative delta (recommended): trigger switch prompt when dominant course's aggregate
-    # RRF score exceeds the current course's score by at least this amount.
-    # Model-agnostic — does not need re-calibration when the embedding model changes.
-    CONTEXT_ROUTING_DELTA: float = 0.10
-    # Absolute floor fallback (ignored when delta approach is used).
-    # If switching to absolute mode, re-calibrate relative to the embedding model's score
-    # distribution and document the model name next to this value in .env.example.
-    CONTEXT_ROUTING_MIN_SCORE: float = 0.35
-
-
 MINIO_MATERIALS_BUCKET = "materials"
 MINIO_ATTACHMENTS_BUCKET = "chat-attachments"
 QDRANT_MATERIALS_COLLECTION = "university_library"

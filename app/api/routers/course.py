@@ -1,4 +1,3 @@
-import io
 import logging
 import uuid
 from urllib.parse import quote
@@ -75,14 +74,17 @@ async def download_course_material(
     _current_user: User = Depends(get_current_user),
 ):
     """Download a course material file with Content-Disposition: attachment."""
-    data, file_name, content_type = await file_service.download_material(material_id, course_id)
+    result = await file_service.get_download_stream(course_id, material_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Material not found")
+    file_name, content_type, stream = result
     encoded = quote(file_name)
     headers = {
         "Content-Disposition": (
             f'attachment; filename="{encoded}"; filename*=UTF-8\'\'{encoded}'
         )
     }
-    return StreamingResponse(io.BytesIO(data), media_type=content_type, headers=headers)
+    return StreamingResponse(stream, media_type=content_type, headers=headers)
 
 
 @router.get("/{course_id}/materials/{material_id}/preview")

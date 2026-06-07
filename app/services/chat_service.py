@@ -98,13 +98,10 @@ class ChatService:
         self.object_storage = object_storage
         self._document_converter = document_converter
 
-    async def create_conversation(
-        self, user_id: uuid.UUID, course_id: Optional[uuid.UUID] = None
-    ) -> Conversation:
+    async def create_conversation(self, user_id: uuid.UUID) -> Conversation:
         conversation = Conversation(
             user_id=user_id,
             title="New Conversation_" + datetime.datetime.now().isoformat(),
-            course_id=course_id,
         )
         self.db_session.add(conversation)
         await self.db_session.commit()
@@ -255,11 +252,9 @@ class ChatService:
             yield StatusEvent(message="Thinking about your question...")
             search_query = await self._condense_query(history, query)
             yield StatusEvent(message="Searching the knowledge base...")
-            course_id_scope = str(conversation.course_id) if conversation.course_id else None
             context, sources = await self._retrieve_relevant_chunks(
                 search_query,
                 collection_name=QDRANT_MATERIALS_COLLECTION,
-                course_id=course_id_scope,
             )
 
         # When attachments are present we only FLUSH the user message so it stays uncommitted
@@ -352,9 +347,8 @@ class ChatService:
         yield StatusEvent(message="Thinking about your question...")
         search_query = await self._condense_query(context_history, query)
         yield StatusEvent(message="Searching the knowledge base...")
-        course_id_scope = str(conversation.course_id) if conversation.course_id else None
         context, sources = await self._retrieve_relevant_chunks(
-            search_query, collection_name=QDRANT_MATERIALS_COLLECTION, course_id=course_id_scope
+            search_query, collection_name=QDRANT_MATERIALS_COLLECTION
         )
 
         format_name = await self._resolve_output_format_name(target_ai_msg.output_format_id)
@@ -726,7 +720,6 @@ class ChatService:
         query: str,
         collection_name: str,
         limit: int = 5,
-        course_id: Optional[str] = None,
     ) -> tuple[str, list[SourceReference]]:
         query_vector, sparse_query = await asyncio.gather(
             self.embedding_client.embed_text(query),
@@ -735,10 +728,10 @@ class ChatService:
 
         semantic_results, keyword_results = await asyncio.gather(
             self.vector_db.search(
-                collection_name, query_vector, limit=limit * 4, course_id_filter=course_id
+                collection_name, query_vector, limit=limit * 4
             ),
             self.vector_db.search_sparse(
-                collection_name, sparse_query, limit=limit * 4, course_id_filter=course_id
+                collection_name, sparse_query, limit=limit * 4
             ),
             return_exceptions=True,
         )
@@ -790,12 +783,15 @@ class ChatService:
         stmt = select(Material).where(Material.object_storage_key.in_(unique_keys))
         db_result = await self.db_session.exec(stmt)
         materials = db_result.all()
+        key_to_mat = {m.object_storage_key: m for m in materials}
+        # Iterate in retrieval-rank order (unique_keys preserves RRF rank).
         # Secondary dedup by file_name: the same file uploaded multiple times creates
         # multiple Material rows with different storage keys but identical display names.
         seen: set[str] = set()
         refs: list[SourceReference] = []
-        for mat in materials:
-            if mat.file_name not in seen:
+        for key in unique_keys:
+            mat = key_to_mat.get(key)
+            if mat and mat.file_name not in seen:
                 seen.add(mat.file_name)
                 refs.append(SourceReference(
                     material_id=mat.id,

@@ -1,4 +1,4 @@
-from typing import Annotated, List, Literal, Optional, Union
+from typing import Annotated, Any, List, Literal, Optional, Union
 from datetime import datetime, timezone
 import uuid
 from enum import Enum
@@ -77,7 +77,7 @@ class MessageBase(SQLModel):
 class Message(MessageBase, TimestampSchema, table=True):
     __tablename__ = "messages"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    sources: Optional[list] = Field(default=None, sa_column=Column(JSON, nullable=True))
+    sources: Optional[list[dict[str, Any]]] = Field(default=None, sa_column=Column(JSON, nullable=True))
 
 
 class MessageCreate(SQLModel):

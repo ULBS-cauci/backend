@@ -2,10 +2,8 @@ import io
 import json
 import uuid
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 from urllib.parse import quote
-
-from sqlmodel import SQLModel
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -55,17 +53,12 @@ async def list_conversations(
     return await service.get_user_conversations(user_id=current_user.id)
 
 
-class ConversationCreate(SQLModel):
-    course_id: Optional[uuid.UUID] = None
-
-
 @router.post("/", response_model=ConversationPublic)
 async def create_conversation(
-    body: ConversationCreate = ConversationCreate(),
     current_user: User = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ):
-    return await service.create_conversation(user_id=current_user.id, course_id=body.course_id)
+    return await service.create_conversation(user_id=current_user.id)
 
 
 @router.post("/grade-answer", response_model=GradeAnswerResponse)
