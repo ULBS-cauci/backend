@@ -38,6 +38,7 @@ from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
 from app.data_access.interfaces.reranker import RerankerInterface
 from app.schemas.vector_schemas import SearchResult
+from app.schemas.vector_schemas import SearchResult
 from docling.document_converter import DocumentConverter
 from app.workers.ingestion_worker import extract_text_with_docling
 
@@ -494,6 +495,7 @@ class ChatService:
             await self.db_session.delete(orphan)
         target_ai_msg.content = new_content
         target_ai_msg.sources = [s.model_dump(mode="json") for s in sources] if sources else None
+        target_ai_msg.sources = [s.model_dump(mode="json") for s in sources] if sources else None
         self.db_session.add(target_ai_msg)
         conversation.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(
             tzinfo=None
@@ -518,6 +520,7 @@ class ChatService:
             await self.db_session.flush()
             await self.db_session.refresh(conversation)
             return conversation
+            return conversation
 
         conversation = await self.get_conversation_for_user(conversation_id, user_id)
         if not conversation:
@@ -530,6 +533,7 @@ class ChatService:
         )
         self.db_session.add(conversation)
         await self.db_session.flush()
+        return conversation
         return conversation
 
     async def _condense_query(self, history: List[Message], query: str) -> str:
@@ -751,6 +755,7 @@ class ChatService:
         sources: Optional[List[SourceReference]] = None,
     ) -> Message:
         serialized_sources = [s.model_dump(mode="json") for s in sources] if sources else None
+        serialized_sources = [s.model_dump(mode="json") for s in sources] if sources else None
         message = Message(
             conversation_id=conversation_id,
             sender=sender,
@@ -874,20 +879,8 @@ class ChatService:
             )
             keyword_results = []
 
-        fused = rrf_fuse(semantic_results, keyword_results, limit=pre_rerank_cap)
-
-        # Deduplicate by exact text before reranking so that a document uploaded
-        # multiple times cannot crowd out other sources by flooding the candidate pool
-        # with identical chunks at different Qdrant IDs.
-        seen_texts: set[str] = set()
-        deduped = []
-        for result in fused:
-            text_key = result.chunk.text.strip()
-            if text_key not in seen_texts:
-                seen_texts.add(text_key)
-                deduped.append(result)
-
-        reranked = await self.reranker.rerank(query, deduped, top_n=limit)
+        fused = rrf_fuse(semantic_results, keyword_results, limit=limit * 2)
+        reranked = await self.reranker.rerank(query, fused, top_n=limit)
         top_score = reranked[0].score if reranked else 0.0
         above_threshold = [res for res in reranked if res.score >= self.score_threshold]
         if not above_threshold:
