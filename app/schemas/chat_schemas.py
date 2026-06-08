@@ -1,11 +1,13 @@
-from typing import Annotated, List, Literal, Optional, Union
+from typing import Annotated, Any, List, Literal, Optional, Union
 from datetime import datetime, timezone
 import uuid
 from enum import Enum
 from sqlmodel import SQLModel, Field
+from sqlalchemy import Column, JSON
 from pydantic import BaseModel
 
 from app.schemas.time_schema import TimeSchema, TimestampSchema
+from app.schemas.source_schemas import SourceReference, SourcesEvent
 
 
 class MessageSender(str, Enum):
@@ -75,17 +77,20 @@ class MessageBase(SQLModel):
 class Message(MessageBase, TimestampSchema, table=True):
     __tablename__ = "messages"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    sources: Optional[list[dict[str, Any]]] = Field(default=None, sa_column=Column(JSON, nullable=True))
 
 
 class MessageCreate(SQLModel):
     conversation_id: Optional[uuid.UUID] = None
     content: str = Field(default="", description="The content of the message.")
+    course_id: Optional[uuid.UUID] = None
     output_format_id: Optional[uuid.UUID] = Field(
         default=None,
         description="Optional FK to output_formats — specifies the desired response format.",
     )
     attachment_ids: List[uuid.UUID] = Field(default_factory=list)
-
+    force_current_course: bool = False
+    existing_message_id: Optional[uuid.UUID] = None
 
 # ==========================================
 # ATTACHMENT
@@ -112,6 +117,7 @@ class MessagePublic(MessageBase):
     id: uuid.UUID
     created_at: datetime
     attachments: List[AttachmentPublic] = Field(default_factory=list)
+    sources: Optional[List[SourceReference]] = None
 
 
 # ==========================================
@@ -159,6 +165,14 @@ class ErrorEvent(BaseModel):
     message: str
 
 
+class ContextSwitchRequestEvent(BaseModel):
+    type: Literal["context_switch_request"] = "context_switch_request"
+    detected_course_id: str
+    detected_course_name: str
+    user_message_id: str
+
+
 StreamEvent = Annotated[
-    Union[StatusEvent, ChunkEvent, ErrorEvent], Field(discriminator="type")
+    Union[StatusEvent, ChunkEvent, ErrorEvent, SourcesEvent, ContextSwitchRequestEvent],
+    Field(discriminator="type"),
 ]

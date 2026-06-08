@@ -1,5 +1,6 @@
 import logging
 import uuid
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -64,6 +65,29 @@ async def upload_course_material(
     except Exception as e:
         logger.error("Error during material upload: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+@router.get("/{course_id}/materials/{material_id}/download")
+async def download_course_material(
+    course_id: uuid.UUID,
+    material_id: uuid.UUID,
+    file_service: FileService = Depends(get_file_service),
+    _current_user: User = Depends(get_current_user),
+):
+    """Download a course material file with Content-Disposition: attachment."""
+    result = await file_service.get_download_stream(course_id, material_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Material not found")
+    file_name, content_type, stream = result
+    # Strip CR/LF to prevent response-splitting; safe="" ensures "/" is also percent-encoded.
+    safe_name = file_name.replace("\r", "").replace("\n", "")
+    encoded = quote(safe_name, safe="")
+    headers = {
+        "Content-Disposition": (
+            f'attachment; filename="{encoded}"; filename*=UTF-8\'\'{encoded}'
+        )
+    }
+    return StreamingResponse(stream, media_type=content_type, headers=headers)
 
 
 @router.get("/{course_id}/materials/{material_id}/preview")

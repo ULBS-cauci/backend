@@ -51,6 +51,7 @@ class VectorDBInterface(ABC):
         collection_name: str,
         query_vector: List[float],
         limit: int = 5,
+        course_id: Optional[str] = None,
     ) -> List[SearchResult]:
         """
         Performs a dense (semantic) vector search.
@@ -71,6 +72,7 @@ class VectorDBInterface(ABC):
         collection_name: str,
         sparse_query: SparseVectorSchema,
         limit: int = 5,
+        course_id: Optional[str] = None,
     ) -> List[SearchResult]:
         """
         Performs a sparse (BM25 keyword) vector search.
@@ -81,15 +83,8 @@ class VectorDBInterface(ABC):
             limit (int): Maximum number of results to return. Defaults to 5.
 
         Returns:
-            List[SearchResult]: A list of domain models containing the chunk data and its relevance 
+            List[SearchResult]: A list of domain models containing the chunk data and its relevance
             score, strictly sorted from highest relevance to lowest relevance.
-        """
-        pass
-
-    @abstractmethod
-    async def delete_chunks_by_source(self, collection_name: str, source: str) -> None:
-        """
-        Deletes all chunks whose metadata.source matches the given source string.
         """
         pass
 

@@ -248,7 +248,7 @@ class FileService:
                 if not text_chunks:
                     raise ValueError("Text splitting produced no chunks.")
 
-                domain_chunks = create_document_chunks(text_chunks, object_storage_key)
+                domain_chunks = create_document_chunks(text_chunks, object_storage_key, course_id=str(material.course_id))
 
                 dense_vectors = await embed_client.embed_batch(text_chunks)
                 if not dense_vectors:
@@ -300,6 +300,31 @@ class FileService:
             select(Material).where(Material.course_id == course_id)
         )
         return [MaterialPublic.model_validate(m) for m in result.all()]
+
+    async def get_download_stream(
+        self, course_id: uuid.UUID, material_id: uuid.UUID
+    ) -> tuple[str, str, AsyncGenerator[bytes, None]] | None:
+        """Return (file_name, content_type, byte_stream) for a download response, or None if not found.
+
+        Uses streaming (stream_file) to avoid loading the full file into memory.
+        Verifies the material belongs to the given course before streaming.
+        """
+        result = await self.db.exec(
+            select(Material).where(
+                Material.id == material_id,
+                Material.course_id == course_id,
+            )
+        )
+        material = result.one_or_none()
+        if material is None or not material.object_storage_key:
+            return None
+        content_type = _CONTENT_TYPE_BY_EXTENSION.get(
+            material.file_type or "", "application/octet-stream"
+        )
+        stream = self.object_storage.stream_file(
+            MINIO_MATERIALS_BUCKET, material.object_storage_key
+        )
+        return material.file_name, content_type, stream
 
     async def get_material_stream(
         self, course_id: uuid.UUID, material_id: uuid.UUID
