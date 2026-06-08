@@ -369,14 +369,20 @@ class ChatService:
         # came up empty (e.g. the user clicked "Stay" on an off-topic question),
         # skip the LLM and return a polite refusal immediately.
         if conversation.course_id and not context and not attachment_texts:
-            logger.info("ROUTING: Context empty for scoped course. Short-circuiting LLM call.")
+            logger.info("ROUTING: Context empty for scoped course. Returning refusal.")
             refusal_message = (
-                "Această întrebare nu pare să aibă legătură cu materialele cursului selectat. "
-                "Te rog să pui o întrebare relevantă pentru acest curs."
-            )
+                await self.llm_client.generate(self._build_refusal_messages(query))
+            ).strip()
+            if not refusal_message:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="The model returned an empty response. Please try again.",
+                )
             yield ChunkEvent(content=refusal_message)
             await self._persist_message(
-                conversation.id, MessageSender.AI, refusal_message,
+                conversation.id,
+                MessageSender.AI,
+                refusal_message,
                 output_format_id=output_format_id,
             )
             return

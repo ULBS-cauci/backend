@@ -60,13 +60,14 @@ async def list_conversations(
 
 @router.post("/", response_model=ConversationPublic)
 async def create_conversation(
-    body: ConversationCreate = ConversationCreate(),
+    body: Optional[ConversationCreate] = None,
     current_user: User = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ):
+    data = body or ConversationCreate()
     return await service.create_conversation(
         user_id=current_user.id,
-        course_id=body.course_id,
+        course_id=data.course_id,
     )
 
 
