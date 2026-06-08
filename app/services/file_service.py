@@ -318,7 +318,7 @@ class FileService:
         material = result.one_or_none()
         if material is None or not material.object_storage_key:
             return None
-        content_type = _CONTENT_TYPE_BY_EXTENSION.get(
+        content_type = CONTENT_TYPE_BY_EXTENSION.get(
             material.file_type or "", "application/octet-stream"
         )
         stream = self.object_storage.stream_file(

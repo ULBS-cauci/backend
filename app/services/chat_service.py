@@ -412,31 +412,9 @@ class ChatService:
                 detail="The model returned an empty response. Please try again.",
             )
 
-        # Persist the whole turn only after generation succeeds. A stopped/disconnected
-        # stream raises CancelledError at the `yield` above and never reaches here, so the
-        # turn is fully discarded with nothing committed (no orphaned user message).
-        #
-        # When attachments are present we only FLUSH the user message so it stays uncommitted
-        # until linking succeeds; _link_attachments_to_message then commits both together (and
-        # rolls back the flushed message on failure), keeping message + attachments atomic.
-        # With no attachments there is nothing to link, so commit the message directly.
-        # The user and AI turns are created back-to-back, so explicit timestamps (user = now,
-        # AI = now + 1ms) keep them ordered (get_conversation_messages sorts by created_at).
-        now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
-        user_message = await self._persist_message(
-            conversation_id, MessageSender.USER, query,
-            output_format_id=output_format_id, flush_only=bool(attachment_ids),
-            created_at=now,
-        )
-        if attachment_ids:
-            await self._link_attachments_to_message(
-                user_message.id, attachment_ids, user_id
-            )
-
         await self._persist_message(
             conversation.id, MessageSender.AI, new_content,
             output_format_id=output_format_id,
-            created_at=now + datetime.timedelta(microseconds=1000),
             sources=sources or None,
         )
         if sources:
