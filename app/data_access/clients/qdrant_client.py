@@ -59,11 +59,23 @@ class QdrantClient(VectorDBInterface):
             results.append(SearchResult(chunk=chunk, score=point.score))
         return results
 
+    @staticmethod
+    def _build_course_filter(course_id: Optional[str]) -> Optional[Filter]:
+        if not course_id:
+            return None
+        return Filter(
+            must=[FieldCondition(
+                key="metadata.course_id",
+                match=MatchValue(value=str(course_id)),
+            )]
+        )
+
     async def search(
         self,
         collection_name: str,
         query_vector: List[float],
         limit: int = 5,
+        course_id: Optional[str] = None,
     ) -> List[SearchResult]:
         if not await self.client.collection_exists(collection_name):
             return []
@@ -73,6 +85,7 @@ class QdrantClient(VectorDBInterface):
             using="dense",
             limit=limit,
             with_payload=True,
+            query_filter=self._build_course_filter(course_id),
         )
         return self._map_points_to_results(response.points)
 
@@ -81,6 +94,7 @@ class QdrantClient(VectorDBInterface):
         collection_name: str,
         sparse_query: SparseVectorSchema,
         limit: int = 5,
+        course_id: Optional[str] = None,
     ) -> List[SearchResult]:
         if not await self.client.collection_exists(collection_name):
             return []
@@ -93,6 +107,7 @@ class QdrantClient(VectorDBInterface):
             using="sparse",
             limit=limit,
             with_payload=True,
+            query_filter=self._build_course_filter(course_id),
         )
         return self._map_points_to_results(response.points)
 

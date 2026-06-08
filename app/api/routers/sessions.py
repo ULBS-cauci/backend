@@ -2,11 +2,12 @@ import io
 import json
 import uuid
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.dependencies import (
@@ -30,6 +31,10 @@ from app.schemas.chat_schemas import (
 )
 from app.schemas.user_schemas import User
 from app.services.chat_service import ChatService
+
+
+class ConversationCreate(BaseModel):
+    course_id: Optional[uuid.UUID] = None
 
 router = APIRouter()
 
@@ -55,10 +60,15 @@ async def list_conversations(
 
 @router.post("/", response_model=ConversationPublic)
 async def create_conversation(
+    body: Optional[ConversationCreate] = None,
     current_user: User = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ):
-    return await service.create_conversation(user_id=current_user.id)
+    data = body or ConversationCreate()
+    return await service.create_conversation(
+        user_id=current_user.id,
+        course_id=data.course_id,
+    )
 
 
 @router.post("/grade-answer", response_model=GradeAnswerResponse)
@@ -256,6 +266,9 @@ async def ask(
                 conversation_id=payload.conversation_id,
                 attachment_ids=payload.attachment_ids,
                 output_format_id=payload.output_format_id,
+                course_id=payload.course_id,
+                force_current_course=payload.force_current_course,
+                existing_message_id=payload.existing_message_id,
             ):
                 yield f"data: {event.model_dump_json()}\n\n"
         except HTTPException as exc:
