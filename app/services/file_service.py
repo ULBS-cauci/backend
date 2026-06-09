@@ -32,7 +32,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 
-from app.core.helpers import build_material_object_key
+from app.core.helpers import CONTENT_TYPE_BY_EXTENSION, build_material_object_key
 from app.core.config import (
     MINIO_MATERIALS_BUCKET,
     QDRANT_MATERIALS_COLLECTION,
@@ -48,14 +48,6 @@ from app.workers.ingestion_worker import create_document_chunks, extract_text_wi
 
 logger = logging.getLogger(__name__)
 
-_CONTENT_TYPE_BY_EXTENSION: dict[str, str] = {
-    "pdf":  "application/pdf",
-    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    "png":  "image/png",
-    "jpg":  "image/jpeg",
-    "jpeg": "image/jpeg",
-}
 
 class FileService:
     def __init__(
@@ -90,20 +82,20 @@ class FileService:
         suffix: str = Path(filename).suffix.lstrip(".").lower()
 
         if not suffix:
-            _ct_to_ext: dict[str, str] = {mime: ext for ext, mime in _CONTENT_TYPE_BY_EXTENSION.items()}
+            _ct_to_ext: dict[str, str] = {mime: ext for ext, mime in CONTENT_TYPE_BY_EXTENSION.items()}
             suffix = _ct_to_ext.get(file.content_type or "", "")
             if suffix:
                 filename = f"unnamed_document.{suffix}" if not filename else f"{filename}.{suffix}"
             else:
                 filename = filename or "unnamed_document"
 
-        if suffix not in _CONTENT_TYPE_BY_EXTENSION:
+        if suffix not in CONTENT_TYPE_BY_EXTENSION:
             raise ValueError(
                 f"Unsupported file type '.{suffix}'. "
-                f"Accepted: {', '.join(sorted(_CONTENT_TYPE_BY_EXTENSION))}"
+                f"Accepted: {', '.join(sorted(CONTENT_TYPE_BY_EXTENSION))}"
             )
 
-        content_type = _CONTENT_TYPE_BY_EXTENSION[suffix]
+        content_type = CONTENT_TYPE_BY_EXTENSION[suffix]
         content = await file.read()
         material_id = uuid.uuid4()
         object_key = build_material_object_key(course_id, material_id, filename)
@@ -326,7 +318,7 @@ class FileService:
         material = result.one_or_none()
         if material is None or not material.object_storage_key:
             return None
-        content_type = _CONTENT_TYPE_BY_EXTENSION.get(
+        content_type = CONTENT_TYPE_BY_EXTENSION.get(
             material.file_type or "", "application/octet-stream"
         )
         stream = self.object_storage.stream_file(

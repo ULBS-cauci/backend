@@ -387,6 +387,7 @@ class ChatService:
             )
             return
 
+
         predefined_prompt, custom_prompt = await self._resolve_user_prompts(user_id)
         if not context and not attachment_texts and not history:
             messages = self._build_refusal_messages(query)
@@ -410,6 +411,7 @@ class ChatService:
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="The model returned an empty response. Please try again.",
             )
+
         await self._persist_message(
             conversation.id, MessageSender.AI, new_content,
             output_format_id=output_format_id,
@@ -501,7 +503,6 @@ class ChatService:
             await self.db_session.delete(orphan)
         target_ai_msg.content = new_content
         target_ai_msg.sources = [s.model_dump(mode="json") for s in sources] if sources else None
-        target_ai_msg.sources = [s.model_dump(mode="json") for s in sources] if sources else None
         self.db_session.add(target_ai_msg)
         conversation.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(
             tzinfo=None
@@ -526,7 +527,6 @@ class ChatService:
             await self.db_session.flush()
             await self.db_session.refresh(conversation)
             return conversation
-            return conversation
 
         conversation = await self.get_conversation_for_user(conversation_id, user_id)
         if not conversation:
@@ -539,7 +539,6 @@ class ChatService:
         )
         self.db_session.add(conversation)
         await self.db_session.flush()
-        return conversation
         return conversation
 
     async def _condense_query(self, history: List[Message], query: str) -> str:
@@ -758,9 +757,9 @@ class ChatService:
         *,
         output_format_id: Optional[uuid.UUID] = None,
         flush_only: bool = False,
+        created_at: Optional[datetime.datetime] = None,
         sources: Optional[List[SourceReference]] = None,
     ) -> Message:
-        serialized_sources = [s.model_dump(mode="json") for s in sources] if sources else None
         serialized_sources = [s.model_dump(mode="json") for s in sources] if sources else None
         message = Message(
             conversation_id=conversation_id,
@@ -769,6 +768,12 @@ class ChatService:
             sources=serialized_sources,
             output_format_id=output_format_id,
         )
+        # The user turn and the AI turn are now persisted back-to-back after streaming, so
+        # their default created_at timestamps can collide. Ordering (get_conversation_messages)
+        # is purely created_at asc with no tiebreaker, so an explicit timestamp lets callers
+        # guarantee the user message sorts before its answer.
+        if created_at is not None:
+            message.created_at = created_at
         self.db_session.add(message)
         if flush_only:
             await self.db_session.flush()

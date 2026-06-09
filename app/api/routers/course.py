@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 
 from app.api.dependencies import get_course_service, get_current_user, get_file_service
+from app.core.helpers import content_type_for_filename
 from app.schemas.course_schemas import CourseCreate, CourseDisplay, CourseUpdate
 from app.schemas.knowledge_schemas import MaterialPublic
 from app.schemas.user_schemas import User
@@ -101,7 +102,7 @@ async def preview_course_material(
     filename, stream = result
     return StreamingResponse(
         stream,
-        media_type="application/pdf",
+        media_type=content_type_for_filename(filename),
         headers={
             "Content-Disposition": f'inline; filename="{filename}"',
             "Cache-Control": "private, max-age=3600",
