@@ -38,7 +38,6 @@ from app.data_access.interfaces.embedding import EmbeddingInterface
 from app.data_access.interfaces.sparse_encoder import SparseEncoderInterface
 from app.data_access.interfaces.reranker import RerankerInterface
 from app.schemas.vector_schemas import SearchResult
-from app.schemas.vector_schemas import SearchResult
 from docling.document_converter import DocumentConverter
 from app.workers.ingestion_worker import extract_text_with_docling
 
@@ -276,11 +275,23 @@ class ChatService:
             yield StatusEvent(message="Thinking about your question...")
             search_query = await self._condense_query(history, query)
             yield StatusEvent(message="Searching the knowledge base...")
+            course_filter = str(conversation.course_id) if conversation.course_id else None
             context, sources = await self._retrieve_relevant_chunks(
                 search_query,
                 collection_name=QDRANT_MATERIALS_COLLECTION,
-                course_id=str(conversation.course_id) if conversation.course_id else None,
+                course_id=course_filter,
             )
+
+            if not context and search_query.strip().lower() != query.strip().lower():
+                logger.info(
+                    f"Condensed query '{search_query}' returned no results — "
+                    "retrying with raw query."
+                )
+                context, sources = await self._retrieve_relevant_chunks(
+                    query,
+                    collection_name=QDRANT_MATERIALS_COLLECTION,
+                    course_id=course_filter,
+                )
 
             logger.info(
                 f"ROUTING: force_current? {force_current_course} | "
@@ -662,9 +673,14 @@ class ChatService:
                 ChatMessage(
                     role=MessageRole.SYSTEM,
                     content=(
-                        "The following excerpts were retrieved from the university course materials. "
-                        "Answer the student's question using ONLY the information in these excerpts. "
-                        "Do NOT use your general knowledge or any information outside of these excerpts. "
+                        "FRESHLY RETRIEVED COURSE MATERIAL — authoritative source for this question.\n"
+                        "The following excerpts were retrieved specifically for the student's current "
+                        "question. They are the PRIMARY source of truth for your answer. "
+                        "If anything stated in the conversation history above conflicts with or is "
+                        "absent from these excerpts, defer to these excerpts — do not rely on what "
+                        "was discussed earlier to answer the current question.\n"
+                        "Answer using ONLY the information in these excerpts. "
+                        "Do NOT use your general knowledge or any information outside of them. "
                         "IMPORTANT: If the student asks for a concept definition or explanation and "
                         "the excerpts contain practical examples, solved problems, worked exercises, "
                         "or case studies related to that concept, you MUST use those to construct "
