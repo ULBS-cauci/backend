@@ -218,6 +218,7 @@ class ChatService:
     async def save_quiz_answer(
         self,
         message_id: uuid.UUID,
+        user_id: uuid.UUID,
         question: str,
         student_answer: str,
         correct: bool,
@@ -225,6 +226,11 @@ class ChatService:
     ) -> None:
         message = await self.db_session.get(Message, message_id)
         if not message:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+        # Verify the message belongs to a conversation owned by the caller before
+        # mutating it — without this any known message UUID could be overwritten.
+        conversation = await self.get_conversation_for_user(message.conversation_id, user_id)
+        if not conversation:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
         existing = [a for a in (message.quiz_answers or []) if a.get("question") != question]
         existing.append({"question": question, "student_answer": student_answer, "correct": correct, "feedback": feedback})

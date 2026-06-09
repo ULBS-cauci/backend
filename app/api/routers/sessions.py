@@ -85,10 +85,12 @@ async def grade_answer(
 async def save_quiz_answer(
     message_id: uuid.UUID,
     payload: QuizAnswerSave,
+    current_user: User = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ):
     await service.save_quiz_answer(
-        message_id, payload.question, payload.student_answer, payload.correct, payload.feedback,
+        message_id, current_user.id, payload.question, payload.student_answer,
+        payload.correct, payload.feedback,
     )
 
 
