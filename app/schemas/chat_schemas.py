@@ -78,6 +78,7 @@ class Message(MessageBase, TimestampSchema, table=True):
     __tablename__ = "messages"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     sources: Optional[list[dict[str, Any]]] = Field(default=None, sa_column=Column(JSON, nullable=True))
+    quiz_answers: Optional[list[dict[str, Any]]] = Field(default=None, sa_column=Column(JSON, nullable=True))
 
 
 class MessageCreate(SQLModel):
@@ -113,10 +114,18 @@ class AttachmentPublic(SQLModel):
     created_at: datetime
 
 
+class QuizAnswer(BaseModel):
+    question: str
+    student_answer: str
+    correct: bool
+    feedback: str
+
+
 class MessagePublic(MessageBase):
     id: uuid.UUID
     created_at: datetime
     attachments: List[AttachmentPublic] = Field(default_factory=list)
+    quiz_answers: Optional[List[QuizAnswer]] = None
     sources: Optional[List[SourceReference]] = None
 
 
@@ -150,6 +159,12 @@ class GradeAnswerResponse(BaseModel):
     feedback: str
 
 
+# Request body for POST /sessions/{message_id}/quiz-answer — same shape as the
+# stored QuizAnswer; named separately to keep the API contract explicit.
+class QuizAnswerSave(QuizAnswer):
+    pass
+
+
 class StatusEvent(BaseModel):
     type: Literal["status"] = "status"
     message: str
@@ -172,7 +187,12 @@ class ContextSwitchRequestEvent(BaseModel):
     user_message_id: str
 
 
+class DoneEvent(BaseModel):
+    type: Literal["done"] = "done"
+    message_id: str
+
+
 StreamEvent = Annotated[
-    Union[StatusEvent, ChunkEvent, ErrorEvent, SourcesEvent, ContextSwitchRequestEvent],
+    Union[StatusEvent, ChunkEvent, ErrorEvent, SourcesEvent, ContextSwitchRequestEvent, DoneEvent],
     Field(discriminator="type"),
 ]

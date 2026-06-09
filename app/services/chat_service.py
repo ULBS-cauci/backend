@@ -20,6 +20,7 @@ from app.schemas.chat_schemas import (
     ChunkEvent,
     ContextSwitchRequestEvent,
     Conversation,
+    DoneEvent,
     Message,
     MessagePublic,
     MessageSender,
@@ -213,6 +214,30 @@ class ChatService:
                 pass
         return {"correct": False, "feedback": raw.strip()}
 
+    async def save_quiz_answer(
+        self,
+        message_id: uuid.UUID,
+        user_id: uuid.UUID,
+        question: str,
+        student_answer: str,
+        correct: bool,
+        feedback: str,
+    ) -> None:
+        message = await self.db_session.get(Message, message_id)
+        if not message:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+        # Verify the message belongs to a conversation owned by the caller before
+        # mutating it — without this any known message UUID could be overwritten.
+        conversation = await self.get_conversation_for_user(message.conversation_id, user_id)
+        if not conversation:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+        existing = [a for a in (message.quiz_answers or []) if a.get("question") != question]
+        existing.append({"question": question, "student_answer": student_answer, "correct": correct, "feedback": feedback})
+        message.quiz_answers = existing
+        # No explicit commit: get_db_session commits once the request completes (and
+        # rolls back on error), keeping the whole request atomic.
+        self.db_session.add(message)
+
     async def list_output_formats(self) -> List[OutputFormat]:
         stmt = select(OutputFormat).order_by(asc(OutputFormat.created_at))
         result = await self.db_session.exec(stmt)
@@ -390,12 +415,13 @@ class ChatService:
                     detail="The model returned an empty response. Please try again.",
                 )
             yield ChunkEvent(content=refusal_message)
-            await self._persist_message(
+            refusal_msg = await self._persist_message(
                 conversation.id,
                 MessageSender.AI,
                 refusal_message,
                 output_format_id=output_format_id,
             )
+            yield DoneEvent(message_id=str(refusal_msg.id))
             return
 
 
@@ -423,13 +449,14 @@ class ChatService:
                 detail="The model returned an empty response. Please try again.",
             )
 
-        await self._persist_message(
+        ai_message = await self._persist_message(
             conversation.id, MessageSender.AI, new_content,
             output_format_id=output_format_id,
             sources=sources or None,
         )
         if sources:
             yield SourcesEvent(sources=sources)
+        yield DoneEvent(message_id=str(ai_message.id))
 
     async def regenerate_stream(
         self,
@@ -523,6 +550,7 @@ class ChatService:
 
         if sources:
             yield SourcesEvent(sources=sources)
+        yield DoneEvent(message_id=str(target_ai_msg.id))
 
     async def _get_or_create_conversation(
         self,
