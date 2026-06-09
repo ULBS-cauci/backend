@@ -20,6 +20,7 @@ from app.schemas.chat_schemas import (
     ChunkEvent,
     ContextSwitchRequestEvent,
     Conversation,
+    DoneEvent,
     Message,
     MessagePublic,
     MessageSender,
@@ -396,12 +397,13 @@ class ChatService:
                     detail="The model returned an empty response. Please try again.",
                 )
             yield ChunkEvent(content=refusal_message)
-            await self._persist_message(
+            refusal_msg = await self._persist_message(
                 conversation.id,
                 MessageSender.AI,
                 refusal_message,
                 output_format_id=output_format_id,
             )
+            yield DoneEvent(message_id=str(refusal_msg.id))
             return
 
 
@@ -429,13 +431,14 @@ class ChatService:
                 detail="The model returned an empty response. Please try again.",
             )
 
-        await self._persist_message(
+        ai_message = await self._persist_message(
             conversation.id, MessageSender.AI, new_content,
             output_format_id=output_format_id,
             sources=sources or None,
         )
         if sources:
             yield SourcesEvent(sources=sources)
+        yield DoneEvent(message_id=str(ai_message.id))
 
     async def regenerate_stream(
         self,
@@ -529,6 +532,7 @@ class ChatService:
 
         if sources:
             yield SourcesEvent(sources=sources)
+        yield DoneEvent(message_id=str(target_ai_msg.id))
 
     async def _get_or_create_conversation(
         self,

@@ -181,7 +181,12 @@ class ContextSwitchRequestEvent(BaseModel):
     user_message_id: str
 
 
+class DoneEvent(BaseModel):
+    type: Literal["done"] = "done"
+    message_id: str
+
+
 StreamEvent = Annotated[
-    Union[StatusEvent, ChunkEvent, ErrorEvent, SourcesEvent, ContextSwitchRequestEvent],
+    Union[StatusEvent, ChunkEvent, ErrorEvent, SourcesEvent, ContextSwitchRequestEvent, DoneEvent],
     Field(discriminator="type"),
 ]
