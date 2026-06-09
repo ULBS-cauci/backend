@@ -235,8 +235,9 @@ class ChatService:
         existing = [a for a in (message.quiz_answers or []) if a.get("question") != question]
         existing.append({"question": question, "student_answer": student_answer, "correct": correct, "feedback": feedback})
         message.quiz_answers = existing
+        # No explicit commit: get_db_session commits once the request completes (and
+        # rolls back on error), keeping the whole request atomic.
         self.db_session.add(message)
-        await self.db_session.commit()
 
     async def list_output_formats(self) -> List[OutputFormat]:
         stmt = select(OutputFormat).order_by(asc(OutputFormat.created_at))
