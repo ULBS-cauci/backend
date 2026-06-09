@@ -5,6 +5,7 @@ from app.data_access.interfaces.object_storage import ObjectStorageInterface
 from app.data_access.interfaces.vector_db import VectorDBInterface
 from app.schemas.course_schemas import Course, CourseCreate, CourseUpdate, CourseDisplay
 from app.schemas.knowledge_schemas import Material
+from app.schemas.learning_path_schemas import LearningPath
 from app.schemas.user_schemas import User
 from app.core.config import MINIO_MATERIALS_BUCKET
 
@@ -121,6 +122,13 @@ class CourseService:
                         material.vector_namespace, material.file_name
                     )
             await self.db.delete(material)
+        # Learning paths reference the course but have no DB-level cascade — remove them
+        # here, mirroring the manual Material cleanup above.
+        lp_result = await self.db.execute(
+            select(LearningPath).where(LearningPath.course_id == course_id)
+        )
+        for learning_path in lp_result.scalars().all():
+            await self.db.delete(learning_path)
         await self.db.flush()
         course = await self.db.get(Course, course_id)
         if not course:

@@ -34,6 +34,7 @@ from app.data_access.clients.openai_client import OpenAILLMClient
 
 from app.services.chat_service import ChatService
 from app.services.course_service import CourseService
+from app.services.learning_path_service import LearningPathService
 from app.data_access.interfaces.object_storage import ObjectStorageInterface
 from app.data_access.clients.minio_client import MinIOClient
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
@@ -403,6 +404,18 @@ def get_chat_service(
         db_session=db_session,
         object_storage=object_storage,
         document_converter=_get_docling_converter(),
+    )
+
+
+def get_learning_path_service(
+    vector_db: VectorDBInterface = Depends(get_vector_db_client),
+    llm_client: LLMInterface = Depends(get_llm_client),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> LearningPathService:
+    return LearningPathService(
+        vector_db=vector_db,
+        llm_client=llm_client,
+        db_session=db_session,
     )
 
 

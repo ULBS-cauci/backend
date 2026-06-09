@@ -66,6 +66,9 @@ from app.schemas.chat_schemas import (
 )
 from app.schemas.course_schemas import Course
 from app.schemas.knowledge_schemas import Material
+from app.schemas.learning_path_schemas import (
+    LearningPath,  # noqa: F401 — imported so SQLModel registers the table
+)
 from app.schemas.user_schemas import User, UserRole, UserSetting
 
 # ── logging setup ─────────────────────────────────────────────────────────────
@@ -217,6 +220,7 @@ _TRUNCATE_ORDER: list[str] = [
     "output_formats",  # referenced by messages.output_format_id
     "conversations",
     "materials",
+    "learning_paths",  # references users + courses; no children
     "system_prompts",
     "llm_tips",
     "tip_categories",  # referenced by llm_tips.category_id

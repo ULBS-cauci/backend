@@ -16,6 +16,7 @@ from app.schemas.user_schemas import User, UserSetting
 from app.schemas.knowledge_schemas import Material
 from app.schemas.chat_schemas import Conversation, Message, Attachment, SharedLink, OutputFormat
 from app.schemas.admin_schemas import SystemPrompt, LlmTip, TipCategory
+from app.schemas.learning_path_schemas import LearningPath
 
 from app.api.dependencies import (
     _get_async_engine,
@@ -74,7 +75,7 @@ async def lifespan(app: FastAPI):
         logger.info("Database engine disposed.")
 
 
-from app.api.routers import sessions, course, user
+from app.api.routers import sessions, course, user, learning_paths
 
 app = FastAPI(
     title="AI Tutor API",
@@ -94,6 +95,7 @@ app.add_middleware(
 app.include_router(sessions.router, prefix="/api/v1/sessions", tags=["Sessions"])
 app.include_router(course.router,   prefix="/api/v1/courses",  tags=["Courses"])
 app.include_router(user.router,     prefix="/api/v1/user",     tags=["User"])
+app.include_router(learning_paths.router, prefix="/api/v1/learning-paths", tags=["Learning Paths"])
 
 
 @app.get("/")
