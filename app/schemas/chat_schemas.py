@@ -78,6 +78,7 @@ class Message(MessageBase, TimestampSchema, table=True):
     __tablename__ = "messages"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     sources: Optional[list[dict[str, Any]]] = Field(default=None, sa_column=Column(JSON, nullable=True))
+    quiz_answers: Optional[list[dict[str, Any]]] = Field(default=None, sa_column=Column(JSON, nullable=True))
 
 
 class MessageCreate(SQLModel):
@@ -117,6 +118,7 @@ class MessagePublic(MessageBase):
     id: uuid.UUID
     created_at: datetime
     attachments: List[AttachmentPublic] = Field(default_factory=list)
+    quiz_answers: Optional[list[dict[str, Any]]] = None
     sources: Optional[List[SourceReference]] = None
 
 
@@ -146,6 +148,13 @@ class GradeAnswerRequest(BaseModel):
 
 
 class GradeAnswerResponse(BaseModel):
+    correct: bool
+    feedback: str
+
+
+class QuizAnswerSave(BaseModel):
+    question: str
+    student_answer: str
     correct: bool
     feedback: str
 

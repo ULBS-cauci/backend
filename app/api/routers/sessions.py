@@ -32,6 +32,7 @@ from app.schemas.chat_schemas import (
     MessageCreate,
     MessagePublic,
     OutputFormatPublic,
+    QuizAnswerSave,
 )
 from app.schemas.user_schemas import User
 from app.services.chat_service import ChatService
@@ -77,6 +78,17 @@ async def grade_answer(
     return GradeAnswerResponse(
         correct=bool(result.get("correct", False)),
         feedback=str(result.get("feedback", "")),
+    )
+
+
+@router.post("/{message_id}/quiz-answer", status_code=status.HTTP_204_NO_CONTENT)
+async def save_quiz_answer(
+    message_id: uuid.UUID,
+    payload: QuizAnswerSave,
+    service: ChatService = Depends(get_chat_service),
+):
+    await service.save_quiz_answer(
+        message_id, payload.question, payload.student_answer, payload.correct, payload.feedback,
     )
 
 

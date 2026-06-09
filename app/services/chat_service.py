@@ -214,6 +214,23 @@ class ChatService:
                 pass
         return {"correct": False, "feedback": raw.strip()}
 
+    async def save_quiz_answer(
+        self,
+        message_id: uuid.UUID,
+        question: str,
+        student_answer: str,
+        correct: bool,
+        feedback: str,
+    ) -> None:
+        message = await self.db_session.get(Message, message_id)
+        if not message:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+        existing = [a for a in (message.quiz_answers or []) if a.get("question") != question]
+        existing.append({"question": question, "student_answer": student_answer, "correct": correct, "feedback": feedback})
+        message.quiz_answers = existing
+        self.db_session.add(message)
+        await self.db_session.commit()
+
     async def list_output_formats(self) -> List[OutputFormat]:
         stmt = select(OutputFormat).order_by(asc(OutputFormat.created_at))
         result = await self.db_session.exec(stmt)
