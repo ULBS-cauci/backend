@@ -21,6 +21,8 @@ directory is changed. Always read it before touching a schema.
 | `course_schemas.py` — `Course` | field added / renamed / removed | `scripts/seed.py` → `SEED_COURSES` dicts; `app/services/course_service.py`; `app/api/routers/course.py` |
 | `chat_schemas.py` — `Conversation` | field added / renamed / removed | `scripts/seed.py` → `SEED_CONVERSATIONS` dicts; `app/services/chat_service.py` |
 | `chat_schemas.py` — `SharedLink` | field added / renamed / removed | `scripts/seed.py` → `SEED_SHARED_LINKS` dicts |
+| `learning_path_schemas.py` — `LearningPath` | field added / renamed / removed | `app/services/learning_path_service.py` (constructs `LearningPath()` + `LearningPathModule`); `app/api/routers/learning_paths.py`; `backend/DATABASE_SCHEMA.md` (entity + JSON-column doc). **Not seeded** — only in `scripts/seed.py` → imports + `_TRUNCATE_ORDER` |
+| `learning_path_schemas.py` — `LearningPathModule` (JSON payload) | field added / renamed / removed | `app/rag_engine/learning_path_prompt.py` (synthesis JSON contract); `frontend/lib/types.ts` (mirror); `backend/DATABASE_SCHEMA.md` JSON-column doc |
 | Any `*` (`table=True`) model | **new table** | `app/main.py` → import list so `SQLModel.metadata.create_all` sees it on startup |
 | Any `*` (`table=True`) model | **table dropped** | `app/main.py` → remove import; `scripts/seed.py` → remove from `_TRUNCATE_ORDER` and its seeder |
 
@@ -50,6 +52,7 @@ app/
     ├── chat_schemas.py              ← OutputFormat, Conversation, Message, Attachment,
     │                                   SharedLink + their DTOs; MessageSender enum
     ├── admin_schemas.py             ← TipCategory, SystemPrompt, LlmTip + their DTOs
+    ├── learning_path_schemas.py     ← LearningPath + DTOs; LearningPathModule (JSON), LearningPathDoneEvent
     ├── llm_schemas.py               ← ChatMessage, MessageRole (LLM wire format — not DB)
     ├── vector_schemas.py            ← Qdrant payload schemas
     └── time_schema.py               ← TimestampSchema, TimeSchema mixins

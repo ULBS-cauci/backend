@@ -3,7 +3,7 @@ from typing import List, Optional
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
     PointStruct, VectorParams, Distance, Filter, FieldCondition, MatchValue, FilterSelector,
-    SparseVectorParams, SparseIndexParams, SparseVector, ScoredPoint,
+    SparseVectorParams, SparseIndexParams, SparseVector, ScoredPoint, Record,
 )
 
 from app.data_access.interfaces.vector_db import VectorDBInterface
@@ -59,6 +59,19 @@ class QdrantClient(VectorDBInterface):
             results.append(SearchResult(chunk=chunk, score=point.score))
         return results
 
+    def _map_records_to_results(self, records: List[Record]) -> List[SearchResult]:
+        """Map scroll() Records (which carry no .score) to SearchResults with score=0.0."""
+        results = []
+        for record in records:
+            payload = record.payload or {}
+            chunk = DocumentChunk(
+                id=uuid.UUID(str(record.id)),
+                text=payload.get("text", ""),
+                metadata=payload.get("metadata", {}),
+            )
+            results.append(SearchResult(chunk=chunk, score=0.0))
+        return results
+
     @staticmethod
     def _build_course_filter(course_id: Optional[str]) -> Optional[Filter]:
         if not course_id:
@@ -110,6 +123,30 @@ class QdrantClient(VectorDBInterface):
             query_filter=self._build_course_filter(course_id),
         )
         return self._map_points_to_results(response.points)
+
+    async def scroll_by_course(
+        self,
+        collection_name: str,
+        course_id: str,
+        limit: int = 500,
+    ) -> List[SearchResult]:
+        if not await self.client.collection_exists(collection_name):
+            return []
+        records: List[Record] = []
+        next_page = None
+        while len(records) < limit:
+            batch, next_page = await self.client.scroll(
+                collection_name=collection_name,
+                scroll_filter=self._build_course_filter(course_id),
+                limit=min(256, limit - len(records)),
+                offset=next_page,
+                with_payload=True,
+                with_vectors=False,
+            )
+            records.extend(batch)
+            if next_page is None:
+                break
+        return self._map_records_to_results(records)
 
     async def delete_chunks_by_source(self, collection_name: str, source: str) -> None:
         if not await self.client.collection_exists(collection_name):

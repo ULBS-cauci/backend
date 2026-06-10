@@ -89,6 +89,29 @@ class VectorDBInterface(ABC):
         pass
 
     @abstractmethod
+    async def scroll_by_course(
+        self,
+        collection_name: str,
+        course_id: str,
+        limit: int = 500,
+    ) -> List[SearchResult]:
+        """
+        Retrieves a broad, UNRANKED sample of chunks for ALL materials of a course
+        (no query vector). Used for course-wide synthesis (e.g. learning-path
+        generation), not for relevance search.
+
+        Args:
+            collection_name (str): The collection to scroll.
+            course_id (str): Only chunks whose metadata.course_id matches are returned.
+            limit (int): Maximum number of chunks to return. Defaults to 500.
+
+        Returns:
+            List[SearchResult]: Chunks for the course. `score` is not meaningful here
+            (set to 0.0) since results are not ranked by relevance.
+        """
+        pass
+
+    @abstractmethod
     async def delete_chunks_by_source(self, collection_name: str, source: str) -> None:
         """
         Deletes all chunks whose metadata.source matches the given source string.

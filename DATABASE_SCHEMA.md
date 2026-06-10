@@ -115,6 +115,19 @@ erDiagram
         datetime updated_at
     }
 
+    %% 6. Learning Paths
+    learning_paths {
+        UUID id PK
+        UUID user_id FK "Ref: users.id"
+        UUID course_id FK "Ref: courses.id"
+        string title
+        string language "dominant language of the materials (nullable)"
+        json modules "ordered list of module objects"
+        json progress "map module.id -> completed bool"
+        datetime created_at
+        datetime updated_at
+    }
+
     %% Relationships
     %% Identity & Setup
     users ||--o{ courses : "held_by"
@@ -139,6 +152,10 @@ erDiagram
     %% Per-User Settings (user_id is PK → at most one row per user)
     users ||--o| user_settings : "configures"
     system_prompts ||--o{ user_settings : "selected_in"
+
+    %% Learning Paths
+    users ||--o{ learning_paths : "owns"
+    courses ||--o{ learning_paths : "covers"
 ```
 
 ## JSON Column: `messages.sources`
@@ -162,6 +179,40 @@ Example value:
     "download_url": "/api/v1/courses/c382901a-.../materials/9d123bca-.../download"
   }
 ]
+```
+
+## JSON Columns: `learning_paths.modules` / `learning_paths.progress`
+
+A learning path is a course-wide, ordered curriculum synthesized from all of a course's
+materials. `modules` is a JSON array of module objects; `progress` is a JSON object mapping
+each module's `id` to a completion flag (validated via `LearningPathModule` on read).
+
+Schema of each `modules` element:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Stable module id (e.g. `m1`); also the key used in `progress` |
+| `title` | string | Module title |
+| `objectives` | string[] | Learning objectives for the module |
+| `summary` | string \| null | Short description of what the module covers |
+| `material_ids` | UUID string[] | FKs to `materials.id` this module is grounded in |
+| `suggested_action` | `"ask_tutor"` \| `"generate_quiz"` \| null | Optional study action |
+
+Example `modules` / `progress`:
+```json
+// modules
+[
+  {
+    "id": "m1",
+    "title": "Foundations",
+    "objectives": ["Define core terms"],
+    "summary": "Introduces the basic vocabulary.",
+    "material_ids": ["9d123bca-..."],
+    "suggested_action": "ask_tutor"
+  }
+]
+// progress
+{ "m1": true, "m2": false }
 ```
 
 ## Class Diagram
@@ -271,6 +322,18 @@ classDiagram
         +UUID user_id
         +String custom_system_prompt
         +UUID selected_system_prompt_id
+        +DateTime created_at
+        +DateTime updated_at
+    }
+
+    class LearningPath {
+        +UUID id
+        +UUID user_id
+        +UUID course_id
+        +String title
+        +String language
+        +JSON modules
+        +JSON progress
         +DateTime created_at
         +DateTime updated_at
     }
