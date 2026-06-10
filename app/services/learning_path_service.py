@@ -2,7 +2,7 @@ import uuid
 import logging
 from typing import AsyncIterator, List, Optional
 
-from sqlmodel import select, desc, asc
+from sqlmodel import select, desc
 from sqlmodel.ext.asyncio.session import AsyncSession
 from fastapi import HTTPException, status
 from pydantic import BaseModel, ValidationError
@@ -94,11 +94,20 @@ class LearningPathService:
 
         # Every material gets a fair share of the budget so a large textbook can't
         # starve smaller lecture notes; strided sampling keeps coverage across each file.
+        # A per-material floor (1500) protects small files, but it can push the naive sum
+        # past MAX_SURVEY_CHARS when there are many materials — so we also track the
+        # remaining global budget and never let the total prompt exceed MAX_SURVEY_CHARS.
         per_material_budget = max(1500, MAX_SURVEY_CHARS // len(grouped))
+        remaining_budget = MAX_SURVEY_CHARS
         material_blocks: List[str] = []
         for source, texts in grouped.items():
+            if remaining_budget <= 0:
+                break
             material = key_to_material[source]
-            body = self._sample_within_budget(texts, per_material_budget)
+            body = self._sample_within_budget(
+                texts, min(per_material_budget, remaining_budget)
+            )
+            remaining_budget -= len(body)
             material_blocks.append(
                 build_material_block(material.id, material.file_name, body)
             )
@@ -174,12 +183,19 @@ class LearningPathService:
                 modules.append(LearningPathModule.model_validate(raw))
             except ValidationError:
                 logger.warning(f"Skipping invalid learning-path module: {raw}")
-        # De-duplicate ids (the model occasionally repeats them).
+        # De-duplicate ids (the model occasionally repeats them). The replacement id
+        # itself can collide (e.g. two "m2" rows would both map to "m2"), so probe
+        # forward until a genuinely unused id is found — module ids must be unique,
+        # they are the keys of the progress map and the PATCH /progress lookup.
         seen: set[str] = set()
         deduped: List[LearningPathModule] = []
         for i, m in enumerate(modules):
             if m.id in seen:
-                m.id = f"m{i + 1}"
+                candidate = f"m{i + 1}"
+                while candidate in seen:
+                    i += 1
+                    candidate = f"m{i + 1}"
+                m.id = candidate
             seen.add(m.id)
             deduped.append(m)
         return deduped
