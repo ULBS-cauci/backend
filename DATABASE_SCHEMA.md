@@ -121,6 +121,7 @@ erDiagram
         UUID user_id FK "Ref: users.id"
         UUID course_id FK "Ref: courses.id"
         string title
+        string language "dominant language of the materials (nullable)"
         json modules "ordered list of module objects"
         json progress "map module.id -> completed bool"
         datetime created_at
@@ -330,6 +331,7 @@ classDiagram
         +UUID user_id
         +UUID course_id
         +String title
+        +String language
         +JSON modules
         +JSON progress
         +DateTime created_at

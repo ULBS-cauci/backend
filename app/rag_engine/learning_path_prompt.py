@@ -19,14 +19,19 @@ LEARNING_PATH_SYSTEM_PROMPT = (
     "ones. Each module MUST be grounded in the provided materials — never introduce "
     "topics, facts, or modules that are not supported by the excerpts. "
     "Order modules by prerequisite dependency and increasing difficulty. "
-    "Write all human-readable text (title, module titles, objectives, summaries) in the "
-    "dominant language of the materials. "
+    "LANGUAGE — this is critical: first determine the dominant natural language of the "
+    "course material excerpts below (e.g. Romanian, English, German, French). You MUST "
+    "write EVERY human-readable string (the path title, and each module's title, "
+    "objectives, and summary) ENTIRELY in that language. Do NOT translate the materials "
+    "into English; if the materials are in Romanian, write the whole path in Romanian. "
+    "Report that language in the top-level \"language\" field as its English name. "
     "Each material excerpt is wrapped in a <material id=\"...\" file=\"...\"> block; cite "
     "the materials a module is based on by putting their ids in that module's "
     "\"material_ids\" array (copy the id values verbatim). "
     "Respond with ONLY a single JSON object and NOTHING else (no prose, no code fence). "
     "The JSON object MUST have this exact shape:\n"
     "{\n"
+    '  "language": "<English name of the language you wrote everything in>",\n'
     '  "title": "<short title for the whole path>",\n'
     '  "modules": [\n'
     "    {\n"

@@ -129,10 +129,12 @@ class LearningPathService:
             )
             return
 
+        language = parsed.get("language")
         path = LearningPath(
             user_id=user_id,
             course_id=course_id,
             title=(str(parsed.get("title") or "Learning Path"))[:255],
+            language=(str(language)[:50] if language else None),
             modules=[m.model_dump(mode="json") for m in modules],
             progress={m.id: False for m in modules},
         )

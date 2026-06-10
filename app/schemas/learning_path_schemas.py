@@ -38,6 +38,9 @@ class LearningPathBase(SQLModel):
 class LearningPath(LearningPathBase, TimeSchema, table=True):
     __tablename__ = "learning_paths"  # type: ignore
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    # Dominant language of the course materials the path was generated in (English
+    # name, e.g. "Romanian"); persisted so the UI can build prompts in that language.
+    language: Optional[str] = Field(default=None, max_length=50)
     # Ordered list of LearningPathModule dicts (JSON, like Message.sources).
     modules: List[dict[str, Any]] = Field(
         default_factory=list, sa_column=Column(JSON, nullable=False)
@@ -66,6 +69,7 @@ class LearningPathProgressUpdate(BaseModel):
 # ==========================================
 class LearningPathPublic(LearningPathBase):
     id: uuid.UUID
+    language: Optional[str] = None
     modules: List[LearningPathModule]
     progress: dict[str, bool]
     created_at: datetime
